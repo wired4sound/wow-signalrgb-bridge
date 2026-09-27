@@ -1,0 +1,5 @@
+## Interface: 16001
+## Title: SignalBeacon
+## Notes: Draws a small strip in the top-left corner that the WoW to SignalRGB bridge reads from the screen. /beacon to toggle.
+## Version: 0.3
+SignalBeacon.lua

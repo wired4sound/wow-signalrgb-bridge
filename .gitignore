@@ -1,0 +1,9 @@
+# Personal notes for Claude Code (see CLAUDE.md)
+CLAUDE.local.md
+
+# Runtime and scratch files
+node_modules/
+sandbox/
+*.tmp
+*.log
+tools/worklight.off

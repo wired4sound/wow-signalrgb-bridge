@@ -1,0 +1,10 @@
+{
+  "logsDir": "",
+  "playerName": "",
+  "lowHealthThreshold": 0.3,
+  "pollMs": 100,
+  "minApplyIntervalMs": 150,
+  "logLevel": "info",
+  "signalrgb": { "host": "127.0.0.1", "port": 16038, "timeoutMs": 2000 },
+  "baseline": null
+}

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WoW Lighting Bridge</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23f2b233'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%231b1d22'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <div>
+        <h1>WoW Lighting Bridge</h1>
+        <p class="sub" id="sub">Connecting…</p>
+      </div>
+    </div>
+    <div class="pills" id="pills">
+      <span class="pill" id="pill-srgb"><i></i><b>SignalRGB</b><span>…</span></span>
+      <span class="pill" id="pill-beacon"><i></i><b>Beacon</b><span>…</span></span>
+      <span class="pill" id="pill-log"><i></i><b>Combat log</b><span>…</span></span>
+    </div>
+  </header>
+
+  <section class="now" aria-label="Live status">
+    <div class="now-card">
+      <div class="label">Showing on your lights</div>
+      <div class="showing" id="showing">…</div>
+      <div class="stack" id="stack"></div>
+      <div class="zones" id="zones" hidden></div>
+    </div>
+    <div class="now-card">
+      <div class="label">Player (from screen beacon)</div>
+      <div class="hp"><div class="hp-fill" id="hp-fill"></div><div class="hp-mark" id="hp-mark" title="Low health threshold"></div><span id="hp-text">…</span></div>
+      <div class="hp mp" id="mp"><div class="hp-fill" id="mp-fill"></div><div class="hp-mark" id="mp-mark" title="Low mana threshold"></div><span id="mp-text">…</span></div>
+      <div class="chips" id="chips"></div>
+    </div>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="effects" aria-selected="true">Effects</button>
+    <button role="tab" data-tab="rules">Rules</button>
+    <button role="tab" data-tab="settings">Settings</button>
+    <button role="tab" data-tab="activity">Activity</button>
+  </nav>
+
+  <main>
+    <section class="panel" id="tab-effects" role="tabpanel">
+      <p class="hint">Changes save automatically and update your lights within a second if that effect is showing. <b>Preview</b> shows an effect on your lights for 5 seconds.</p>
+      <div class="grid" id="effects"></div>
+    </section>
+
+    <section class="panel" id="tab-rules" role="tabpanel" hidden>
+      <p class="hint">Each rule shows an effect when something happens in game. When several are active, the highest priority wins, and your normal effect comes back when none are.</p>
+      <div class="table-wrap">
+        <table class="rules">
+          <thead><tr><th>On</th><th>Rule</th><th>When</th><th>Effect</th><th>Where</th><th>Priority</th><th>Lasts</th></tr></thead>
+          <tbody id="rules"></tbody>
+        </table>
+      </div>
+      <div class="bar-actions">
+        <button class="primary" id="rules-save" disabled>Save rules</button>
+        <span class="status" id="rules-status"></span>
+        <button class="ghost right" id="rules-raw-toggle">Edit as JSON</button>
+      </div>
+      <div id="rules-raw" hidden>
+        <textarea id="rules-json" spellcheck="false" rows="18"></textarea>
+        <div class="bar-actions"><button class="primary" id="rules-json-save">Save JSON</button><span class="status" id="rules-json-status"></span></div>
+      </div>
+    </section>
+
+    <section class="panel" id="tab-settings" role="tabpanel" hidden>
+      <form id="settings" class="settings" autocomplete="off">
+        <label class="field">
+          <span>Low health threshold <b id="thr-val"></b></span>
+          <input type="range" name="lowHealthThreshold" min="5" max="90" step="1">
+          <small>The low health effect starts below this and ends 5% above it.</small>
+        </label>
+        <label class="field">
+          <span>Low mana threshold <b id="mthr-val"></b></span>
+          <input type="range" name="lowManaThreshold" min="5" max="90" step="1">
+          <small>The low mana effect starts below this and ends 5% above it. Needs the screen beacon.</small>
+        </label>
+        <label class="field check">
+          <input type="checkbox" name="beaconEnabled">
+          <span>Use the screen beacon</span>
+          <small>Reads the SignalBeacon strip in the game's top-left corner (about 0.1s delay). When it's off or the game isn't visible, the combat log is used (2 to 13s delay).</small>
+        </label>
+        <label class="field check">
+          <input type="checkbox" name="zonesEnabled">
+          <span>Zones: ceiling and PC parts react separately</span>
+          <small>While you play, one bridge effect ("WoW Bridge") draws every zone. Each rule's <b>Where</b> decides which zones it lights; a zone with nothing to show follows the colors of the game world.</small>
+        </label>
+        <label class="field check">
+          <input type="checkbox" name="ceilingEnabled">
+          <span>Include the ceiling lights (Hue cans)</span>
+          <small>Off: the cans ignore rules and the game world and stay on the room light color below while you play.</small>
+        </label>
+        <label class="field">
+          <span>Room light color (ceiling, when not included)</span>
+          <input type="color" name="ceilingColor">
+          <small>Pick black to turn the cans off while you play.</small>
+        </label>
+        <fieldset class="amb">
+          <legend>Game world colors (ceiling ambience)</legend>
+          <label class="field"><span>Brightness boost <b id="ambGain-val"></b></span><input type="range" name="ambGain" min="0.5" max="6" step="0.1"></label>
+          <label class="field"><span>Color boost <b id="ambSaturation-val"></b></span><input type="range" name="ambSaturation" min="0" max="3" step="0.1"></label>
+          <label class="field"><span>Never darker than <b id="ambFloor-val"></b></span><input type="range" name="ambFloor" min="0" max="0.5" step="0.01"><small>Keeps a little light in dark caves and at night.</small></label>
+          <label class="field"><span>Smoothing <b id="ambSmoothMs-val"></b></span><input type="range" name="ambSmoothMs" min="0" max="3000" step="50"><small>Higher is calmer; spell flashes won't flicker the ceiling.</small></label>
+        </fieldset>
+        <label class="field">
+          <span>Normal effect (when no rule is active, and outside the game)</span>
+          <select name="baseline"></select>
+          <small><i>Follow SignalRGB</i> uses whatever you last picked in SignalRGB.</small>
+        </label>
+        <label class="field">
+          <span>Minimum time between effect switches (ms)</span>
+          <input type="number" name="minApplyIntervalMs" min="0" max="2000" step="10">
+        </label>
+        <label class="field">
+          <span>WoW Logs folder</span>
+          <input type="text" name="logsDir" placeholder="Auto-detect">
+        </label>
+        <label class="field">
+          <span>Character name</span>
+          <input type="text" name="playerName" placeholder="Auto-detect from the combat log">
+        </label>
+        <div class="bar-actions">
+          <button class="primary" type="submit" disabled>Save settings</button>
+          <span class="status" id="settings-status"></span>
+        </div>
+      </form>
+
+      <div class="maint">
+        <h2>Maintenance</h2>
+        <div class="maint-row">
+          <div><b>Install effects</b><small>Writes the effect files and restarts SignalRGB if it hasn't found them all yet. Your lights blink briefly.</small></div>
+          <button id="install">Install effects</button>
+        </div>
+        <div class="maint-row">
+          <div><b>Stop the bridge</b><small>Restores your normal effect and exits. Start it again with <code>start-bridge.cmd</code>.</small></div>
+          <button class="danger" id="shutdown">Stop bridge</button>
+        </div>
+        <p class="status" id="maint-status"></p>
+      </div>
+    </section>
+
+    <section class="panel" id="tab-activity" role="tabpanel" hidden>
+      <ol class="activity" id="activity"></ol>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <template id="effect-card">
+    <article class="card">
+      <canvas width="320" height="120" class="preview"></canvas>
+      <div class="card-body">
+        <div class="card-head">
+          <h3></h3>
+          <span class="running" hidden>running</span>
+        </div>
+        <div class="used"></div>
+        <label class="field compact"><span>Pattern</span><select class="pattern"></select></label>
+        <div class="colors"></div>
+        <div class="params"></div>
+        <div class="card-actions">
+          <button class="primary preview-btn">Preview on lights</button>
+          <button class="ghost reset-btn">Reset</button>
+          <span class="status save-status"></span>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <script src="/patterns.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

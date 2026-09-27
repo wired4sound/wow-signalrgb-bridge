@@ -1,0 +1,16 @@
+{
+  "name": "wow-signalrgb-bridge",
+  "version": "0.2.0",
+  "description": "Drives SignalRGB Pro effects from World of Warcraft: a screen beacon addon for instant player state, the combat log for everything else, and a local settings page",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js --open",
+    "dry": "node src/index.js --dry-run --open",
+    "fake": "node tools/fake-log.js",
+    "srgb": "node tools/srgb.js",
+    "lua": "node tools/lua-check.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=18" },
+  "license": "MIT"
+}

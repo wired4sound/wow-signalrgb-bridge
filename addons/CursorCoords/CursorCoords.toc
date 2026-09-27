@@ -1,0 +1,5 @@
+## Interface: 16001
+## Title: CursorCoords
+## Notes: Shows mouse coordinates next to the cursor. /cc to toggle, /cc print to print.
+## Version: 1.0
+CursorCoords.lua
