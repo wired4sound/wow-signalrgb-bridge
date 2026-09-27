@@ -106,6 +106,21 @@
       scheduleSave(c);
     });
 
+    // Where: sets the zones of every rule that uses this effect (same as the Rules tab).
+    var where = $('.where', node);
+    where.addEventListener('change', function () {
+      if (!data.rules) return;
+      var next = JSON.parse(JSON.stringify(data.rules));
+      next.rules.forEach(function (r) { if (r.effect === c.def.name) r.zones = where.value.split(','); });
+      status(c, 'Saving…');
+      api('PUT', '/api/rules', next).then(function (d) {
+        data.rules = d;
+        if (!rulesDirty) renderRules();
+        updateUsed(c);
+        status(c, 'Saved', 'good');
+      }).catch(function (e) { status(c, e.message, 'err'); updateUsed(c); });
+    });
+
     $('.preview-btn', node).addEventListener('click', function () { previewEffect(c); });
     $('.reset-btn', node).addEventListener('click', function () {
       api('POST', '/api/effects/' + id + '/reset').then(function (d) {
@@ -162,6 +177,23 @@
   function updateUsed(c) {
     var used = usedBy(c.def.name);
     $('.used', c.el).textContent = used.length ? 'Used by: ' + used.join(', ') : 'Not used by any rule';
+    // Where selector mirrors the rules using this effect ("Mixed" if they differ).
+    var where = $('.where', c.el);
+    if (!where || !data.rules) return;
+    var keys = data.rules.rules.filter(function (r) { return r.effect === c.def.name; })
+      .map(function (r) { return (r.zones ? [].concat(r.zones) : ['all']).join(','); });
+    var uniq = keys.filter(function (k, i) { return keys.indexOf(k) === i; });
+    where.textContent = '';
+    WHERE.forEach(function (w) { where.appendChild(el('option', { value: w[0], text: w[1] })); });
+    if (uniq.length === 1 && !WHERE.some(function (w) { return w[0] === uniq[0]; })) {
+      where.appendChild(el('option', { value: uniq[0], text: 'Custom: ' + uniq[0] }));
+    }
+    if (uniq.length > 1) where.appendChild(el('option', { value: '', text: 'Mixed (see Rules)', disabled: 'disabled' }));
+    where.value = uniq.length === 1 ? uniq[0] : uniq.length > 1 ? '' : 'all';
+    where.disabled = !keys.length;
+    where.title = keys.length ? 'Applies to: ' + usedBy(c.def.name).concat(
+      data.rules.rules.filter(function (r) { return r.effect === c.def.name && r.enabled === false; }).map(function (r) { return r.name + ' (off)'; })
+    ).join(', ') : 'No rule uses this effect';
   }
 
   function status(c, msg, cls) {

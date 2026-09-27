@@ -27,7 +27,7 @@ From a terminal: `npm start` (same thing), or `node src/index.js` without openin
 
 ## The settings page
 
-- **Effects:** every bridge effect with a live preview. Pick a pattern (Solid, Breathe, Heartbeat, Breathing mix, Color wave, Flash, Sweep, Sparkle), colors, speed and brightness. Changes save automatically and update your lights within about a second if that effect is showing. **Preview on lights** shows it for 5 seconds. A green *running in SignalRGB* badge means SignalRGB itself reported drawing it.
+- **Effects:** every bridge effect with a live preview. **Where it shows** picks Everywhere, PC only, Ceiling only, or one part (it updates every rule using that effect). Pick a pattern (Solid, Breathe, Heartbeat, Breathing mix, Color wave, Flash, Sweep, Sparkle), colors, speed and brightness. Changes save automatically and update your lights within about a second if that effect is showing. **Preview on lights** shows it for 5 seconds. A green *running in SignalRGB* badge means SignalRGB itself reported drawing it.
 - **Rules:** which effect each game event shows, its priority and how long it lasts. You can also point a rule at any other installed SignalRGB effect. **Edit as JSON** for the full rule format.
 - **Settings:** low health threshold, screen beacon on or off, your normal effect (follow SignalRGB, or a fixed one), Logs folder, character name.
 - **Activity:** what the bridge saw and did, newest first.
