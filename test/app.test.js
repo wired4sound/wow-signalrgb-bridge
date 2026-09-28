@@ -23,7 +23,7 @@ const ok = (over = {}) => ({ ok: true, hp: 1, dead: false, combat: false, encoun
 
 test('beacon: low health with hysteresis, and no low health while dead', () => {
   const b = new BeaconTracker({ lowHealthThreshold: 0.3 });
-  assert.deepStrictEqual(names(b.update(ok(), 0)), ['BEACON_UP']);
+  assert.deepStrictEqual(names(b.update(ok(), 0)), ['BEACON_UP', 'HEALTH_AVAILABLE']);
   assert.deepStrictEqual(names(b.update(ok({ hp: 0.25 }), 100)), ['PLAYER_LOW_HEALTH_START']);
   assert.deepStrictEqual(names(b.update(ok({ hp: 0.32 }), 200)), []); // inside the 5% band
   assert.deepStrictEqual(names(b.update(ok({ hp: 0.36 }), 300)), ['PLAYER_LOW_HEALTH_END']);
@@ -45,13 +45,13 @@ test('beacon: death, release to ghost, revive', () => {
   assert.deepStrictEqual(names(b.update(ok({ hp: 0.3 }), 60)), ['PLAYER_ALIVE']);
   // First reading already a ghost (reload while released): ghost only.
   const g = new BeaconTracker();
-  assert.deepStrictEqual(names(g.update(ok({ dead: true, ghost: true }), 0)), ['BEACON_UP', 'PLAYER_GHOST']);
+  assert.deepStrictEqual(names(g.update(ok({ dead: true, ghost: true }), 0)), ['BEACON_UP', 'HEALTH_AVAILABLE', 'PLAYER_GHOST']);
 });
 
 test('beacon: mana gauge availability and low mana with hysteresis', () => {
   const b = new BeaconTracker({ lowManaThreshold: 0.2 });
   const m = (mana, over = {}) => ok({ hasMana: true, mana, ...over });
-  assert.deepStrictEqual(names(b.update(m(0.8), 0)), ['BEACON_UP', 'MANA_AVAILABLE']);
+  assert.deepStrictEqual(names(b.update(m(0.8), 0)), ['BEACON_UP', 'HEALTH_AVAILABLE', 'MANA_AVAILABLE']);
   assert.strictEqual(b.mana(), 0.8);
   assert.deepStrictEqual(names(b.update(m(0.15), 10)), ['PLAYER_LOW_MANA_START']);
   assert.deepStrictEqual(names(b.update(m(0.22), 20)), []);
@@ -63,7 +63,7 @@ test('beacon: mana gauge availability and low mana with hysteresis', () => {
   const lost = new BeaconTracker({ graceMs: 100 });
   lost.update(m(0.1), 0);
   assert.deepStrictEqual(names(lost.update({ ok: false, why: 'no marker' }, 200)),
-    ['PLAYER_LOW_MANA_END', 'MANA_UNAVAILABLE', 'BEACON_DOWN']);
+    ['PLAYER_LOW_MANA_END', 'MANA_UNAVAILABLE', 'HEALTH_UNAVAILABLE', 'BEACON_DOWN']);
 });
 
 test('gauge image encodes the value in its size', () => {
@@ -176,10 +176,10 @@ test('beacon: short gaps keep state, a long gap hands back to the combat log', (
   assert.deepStrictEqual(names(b.update({ ok: false, why: 'no marker' }, 500)), []);
   assert.strictEqual(b.healthy, true);
   const out = b.update({ ok: false, why: 'no marker' }, 1200);
-  assert.deepStrictEqual(names(out), ['PLAYER_LOW_HEALTH_END', 'PLAYER_COMBAT_END', 'BEACON_DOWN']);
-  assert.strictEqual(out[2].why, 'no marker');
+  assert.deepStrictEqual(names(out), ['PLAYER_LOW_HEALTH_END', 'PLAYER_COMBAT_END', 'HEALTH_UNAVAILABLE', 'BEACON_DOWN']);
+  assert.strictEqual(out.find((e) => e.event === 'BEACON_DOWN').why, 'no marker');
   assert.strictEqual(b.healthy, false);
-  assert.deepStrictEqual(names(b.update(ok({ hp: 0.1 }), 1300)), ['BEACON_UP', 'PLAYER_LOW_HEALTH_START']);
+  assert.deepStrictEqual(names(b.update(ok({ hp: 0.1 }), 1300)), ['BEACON_UP', 'HEALTH_AVAILABLE', 'PLAYER_LOW_HEALTH_START']);
 });
 
 test('beacon: drops duplicate combat log events only while healthy', () => {
@@ -345,7 +345,7 @@ test('api: beacon readings drive effects; late combat log duplicates are dropped
     assert.strictEqual(t.srgb.state.current, 'WoW Low Health');
     let s = (await t.call('GET', '/api/state')).body;
     assert.strictEqual(s.beacon.healthy, true);
-    assert.deepStrictEqual(s.controller.entries.map((e) => e.key), ['Low Health']);
+    assert.deepStrictEqual(s.controller.entries.map((e) => e.key), ['Low Health', 'Health Gauge']);
 
     t.reader.emit('reading', ok({ hp: 0, dead: true }));
     await sleep(40);
@@ -498,8 +498,10 @@ test('api: zones compositor while in game, zone words and ambience over the imag
     assert.strictEqual(t.srgb.state.current, 'WoW Bridge');
     const idx = Object.keys(t.app.effects);
     const manaIdx = idx.indexOf('mana') + 1;
-    // Mana gauge is PC-only: ceiling (zone 0) shows ambience (0), PC zones show the gauge.
-    assert.strictEqual(await word('z0'), 0 | (manaIdx << 4) | (manaIdx << 8));
+    // Ceiling (zone 0) shows ambience (0); the radiator (zone 1) shows the health gauge;
+    // the other PC zones show the mana gauge.
+    const healthIdx = idx.indexOf('health') + 1;
+    assert.strictEqual(await word('z0'), 0 | (healthIdx << 4) | (manaIdx << 8));
     assert.strictEqual(await word('z1'), manaIdx | (manaIdx << 4) | (manaIdx << 8));
     const hi = await word('a0h'), lo = await word('a0l');
     assert.deepStrictEqual([hi >> 4, ((hi & 15) << 4) | (lo >> 8), lo & 255], [0x10, 0x20, 0x30]);

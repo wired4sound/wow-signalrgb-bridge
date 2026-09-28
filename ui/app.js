@@ -264,6 +264,7 @@
     PLAYER_LOW_HEALTH_START: 'Your health drops below the threshold',
     PLAYER_LOW_MANA_START: 'Your mana drops below the threshold',
     MANA_AVAILABLE: 'Always, while you have a mana bar (shows it live)',
+    HEALTH_AVAILABLE: 'Always, while you play (shows your health live)',
     PLAYER_COMBAT_START: 'You enter combat',
     ENCOUNTER_START: 'A boss fight starts',
     ENCOUNTER_WIN: 'A boss dies',
@@ -592,6 +593,7 @@
       card.el.classList.toggle('showing-now', c.showing === name);
       // Gauge previews show your real mana when there is one, a demo sweep otherwise.
       if (card.def.source === 'mana') card.state.level = mana === null ? undefined : mana;
+      if (card.def.source === 'health') card.state.level = r ? r.hp : undefined;
       var ping = s.pings[name];
       var badge = $('.running', card.el);
       if (ping && ping.msAgo < 7000) {

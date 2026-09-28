@@ -124,6 +124,20 @@
       "cooldownMs": 1000
     },
     {
+      "name": "Health Gauge",
+      "event": "HEALTH_AVAILABLE",
+      "effect": "WoW Health",
+      "zones": [
+        "radiator"
+      ],
+      "priority": 26,
+      "clearOn": [
+        {
+          "event": "HEALTH_UNAVAILABLE"
+        }
+      ]
+    },
+    {
       "name": "Mana Gauge",
       "event": "MANA_AVAILABLE",
       "effect": "WoW Mana",

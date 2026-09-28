@@ -24,6 +24,7 @@ const DEFAULT_EFFECTS = {
   death:     { name: 'WoW Death',       pattern: 'solid',   colors: ['#ff0000'], brightness: 100 },
   ghost:     { name: 'WoW Ghost',       pattern: 'mix',     colors: ['#ffffff', '#5ec8ff'], speedMs: 4500, floor: 25, drift: 30, brightness: 100 },
   lowHealth: { name: 'WoW Low Health',  pattern: 'pulse',   colors: ['#ff0000'], speedMs: 1100, floor: 10, brightness: 100 },
+  health:    { name: 'WoW Health',      pattern: 'gauge',   colors: ['#1fd11f', '#021402'], brightness: 100, source: 'health' },
   mana:      { name: 'WoW Mana',        pattern: 'gauge',   colors: ['#0050ff', '#000614'], brightness: 100, source: 'mana' },
   lowMana:   { name: 'WoW Low Mana',    pattern: 'pulse',   colors: ['#0080ff'], speedMs: 700, floor: 5, brightness: 100 },
   bossFight: { name: 'WoW Boss Fight',  pattern: 'wave',    colors: ['#ff4000', '#801000', '#ff9000'], speedMs: 4000, brightness: 100 },
@@ -183,7 +184,11 @@ ${PATTERNS_SRC}
   var zoneState = DATA.zones.map(function () { return { idx: -1, state: {} }; });
   var ambIn = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]], ambHi = [0, 0, 0, 0], ambLo = [0, 0, 0, 0];
   var amb = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
-  var mana = 0, frames = 0, lastError = "", tick = 0, lastT = 0;
+  var frames = 0, lastError = "", tick = 0, lastT = 0;
+  // Live values for gauge designs (mana, health, ...), polled per source.
+  var levels = {}, sources = [];
+  DATA.designs.forEach(function (d) { if (d.source && sources.indexOf(d.source) < 0) sources.push(d.source); });
+  sources.forEach(function (s) { levels[s] = 0; });
 
   function word(key, cb) {
     var img = new Image();
@@ -199,9 +204,11 @@ ${PATTERNS_SRC}
     for (var p = 0; p * 3 < zoneIdx.length; p++) (function (p) {
       word("z" + p, function (v) { for (var j = 0; j < 3 && p * 3 + j < zoneIdx.length; j++) zoneIdx[p * 3 + j] = (v >> (4 * j)) & 15; });
     })(p);
-    var img = new Image();
-    img.onload = function () { mana = img.naturalHeight === 2 ? 0 : (img.naturalWidth - 1) / 1000; };
-    img.src = BASE + "/api/gauge.bmp?source=mana&t=" + Date.now();
+    sources.forEach(function (s) {
+      var img = new Image();
+      img.onload = function () { levels[s] = img.naturalHeight === 2 ? 0 : (img.naturalWidth - 1) / 1000; };
+      img.src = BASE + "/api/gauge.bmp?source=" + encodeURIComponent(s) + "&t=" + Date.now();
+    });
     if (tick % 2 === 0) for (var i = 0; i < 4; i++) (function (i) {
       word("a" + i + "h", function (v) { ambHi[i] = v; setAmb(i); });
       word("a" + i + "l", function (v) { ambLo[i] = v; setAmb(i); });
@@ -211,7 +218,8 @@ ${PATTERNS_SRC}
   function ping() {
     var img = new Image();
     img.src = BASE + "/api/effect-ping?name=" + encodeURIComponent(${JSON.stringify(COMPOSITOR_NAME)})
-      + "&v=${hash}&frames=" + frames + "&level=" + mana + "&z=" + zoneIdx.join(".") + "&amb=" + hex(amb[0])
+      + "&v=${hash}&frames=" + frames + "&level=" + (levels.mana || 0) + "&hp=" + (levels.health || 0)
+      + "&z=" + zoneIdx.join(".") + "&amb=" + hex(amb[0])
       + "&error=" + encodeURIComponent(lastError) + "&t=" + Date.now();
   }
   window.onerror = function (msg, src, line) { lastError = String(msg) + " @" + line; ping(); };
@@ -244,7 +252,7 @@ ${PATTERNS_SRC}
       if (!idx || !DATA.designs[idx - 1]) continue;
       if (zoneState[z].idx !== idx) zoneState[z] = { idx: idx, state: {}, t0: t };
       var def = DATA.designs[idx - 1], st = zoneState[z].state;
-      if (def.source === "mana") st.level = mana;
+      if (def.source) st.level = levels[def.source] || 0;
       ctx.save();
       ctx.beginPath(); ctx.rect(r[0], r[1], r[2], r[3]); ctx.clip();
       WowPatterns.render(ctx, 320, 200, t - zoneState[z].t0, def, st);

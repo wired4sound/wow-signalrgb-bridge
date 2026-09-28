@@ -118,6 +118,12 @@ class BridgeApp {
       log: this.log,
     });
     this.engine = new RuleEngine(this.rules, this.controller, { log: this.log });
+    // Whole-effect mode (no compositor): a rule that only targets part of the PC (e.g. the
+    // health gauge on the radiator) can't take over every light, so it is skipped there.
+    this.controller.wholeFilter = (e) => {
+      const rule = this.rules.find((r) => r.name === e.key);
+      return !rule || zonesLib.GROUPS.pc.every((z) => rule.zones.includes(z));
+    };
 
     this.parser = new CombatLogParser();
     this.tracker = new StateTracker({
@@ -419,6 +425,7 @@ class BridgeApp {
       version: q.v || null,
       current: def ? q.v === effectsLib.designHash(def) : null, // false: SignalRGB is showing an older design
       level: q.level === undefined || q.level === '' ? null : Number(q.level),
+      hp: q.hp === undefined || q.hp === '' ? null : Number(q.hp),
       zones: q.z || null, // compositor only: zone design indices it is drawing
       amb: q.amb || null, //   and the first ambience color it has
     };
@@ -427,6 +434,7 @@ class BridgeApp {
   // Live values for gauge effects (see src/effects.js). null = none right now.
   gaugeValue(source) {
     if (source === 'mana') return this.beacon.mana();
+    if (source === 'health') return this.beacon.health();
     return null;
   }
 

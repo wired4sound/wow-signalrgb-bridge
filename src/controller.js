@@ -22,6 +22,7 @@ class EffectController {
     this.log = log;
     this.entries = new Map();
     this.override = null;
+    this.wholeFilter = null;
     this.seq = 0;
     this.applied = null;
     this.target = null;
@@ -69,9 +70,12 @@ class EffectController {
     this.resolve();
   }
 
-  winner() {
+  // filter: optional (entry) => bool; the app uses it in whole-effect mode to skip rules
+  // that only target part of the PC (they can only show through the zone compositor).
+  winner(filter = null) {
     let best = null;
     for (const e of this.entries.values()) {
+      if (filter && !filter(e)) continue;
       if (!best || e.priority > best.priority || (e.priority === best.priority && e.seq > best.seq)) best = e;
     }
     return best;
@@ -84,10 +88,11 @@ class EffectController {
     this.scheduled = true;
     setImmediate(() => {
       this.scheduled = false;
-      const w = this.winner();
+      const all = this.winner();
       // An override (the zone compositor while in game) replaces rule switching; the
       // compositor draws the winning rules itself. Entries at priority 1000+ (previews)
       // still show directly.
+      const w = all && all.priority >= 1000 ? all : this.winner(this.wholeFilter);
       this.target = w && w.priority >= 1000 ? w : this.override || w || this.baseline;
       this.pump();
     });

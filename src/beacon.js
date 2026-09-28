@@ -69,7 +69,8 @@ class BeaconReader extends EventEmitter {
 // Death is split in two (addon 0.3+): PLAYER_DIED on death, PLAYER_GHOST on release,
 // PLAYER_ALIVE on revive. Mana (0.3+): MANA_AVAILABLE / MANA_UNAVAILABLE bracket the
 // time a live mana value exists (the gauge effect reads it), plus
-// PLAYER_LOW_MANA_START / _END.
+// PLAYER_LOW_MANA_START / _END. HEALTH_AVAILABLE / HEALTH_UNAVAILABLE bracket the time
+// the beacon is live (for the health gauge).
 class BeaconTracker {
   constructor({ lowHealthThreshold = 0.3, lowManaThreshold = 0.2, hysteresis = 0.05, graceMs = 10000 } = {}) {
     this.threshold = lowHealthThreshold;
@@ -92,6 +93,11 @@ class BeaconTracker {
     return this.healthy && this.state.manaOn && typeof this.last?.mana === 'number' ? this.last.mana : null;
   }
 
+  // Latest health fraction, or null without a live beacon.
+  health() {
+    return this.healthy && typeof this.last?.hp === 'number' ? this.last.hp : null;
+  }
+
   ev(event, extra = {}) {
     return { ts: Date.now(), event, synthetic: true, beacon: true, destIsPlayer: true, sourceIsPlayer: true, ...extra };
   }
@@ -108,6 +114,7 @@ class BeaconTracker {
     if (!this.healthy) {
       this.healthy = true;
       out.push(this.ev('BEACON_UP'));
+      out.push(this.ev('HEALTH_AVAILABLE')); // brackets the health gauge
     }
     const s = this.state;
 
@@ -169,6 +176,7 @@ class BeaconTracker {
     // Death is left alone: the Death rule has its own max lifetime, and the combat log
     // tracker will see the next sign of life.
     this.state = { ...s, lowHealth: false, lowMana: false, manaOn: false, combat: false, encounter: false, won: false, wiped: false };
+    out.push(this.ev('HEALTH_UNAVAILABLE'));
     out.push(this.ev('BEACON_DOWN', { why: this.lastWhy }));
     return out;
   }
