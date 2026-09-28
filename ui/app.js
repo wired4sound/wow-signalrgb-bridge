@@ -106,19 +106,12 @@
       scheduleSave(c);
     });
 
-    // Where: sets the zones of every rule that uses this effect (same as the Rules tab).
-    var where = $('.where', node);
-    where.addEventListener('change', function () {
-      if (!data.rules) return;
-      var next = JSON.parse(JSON.stringify(data.rules));
-      next.rules.forEach(function (r) { if (r.effect === c.def.name) r.zones = where.value.split(','); });
-      status(c, 'Saving…');
-      api('PUT', '/api/rules', next).then(function (d) {
-        data.rules = d;
-        if (!rulesDirty) renderRules();
-        updateUsed(c);
-        status(c, 'Saved', 'good');
-      }).catch(function (e) { status(c, e.message, 'err'); updateUsed(c); });
+    // Where: one checkbox per light group; sets the zones of every rule using this effect.
+    var boxes = $('.where-boxes', node);
+    PARTS.forEach(function (p) {
+      var cb = el('input', { type: 'checkbox', value: p[0] });
+      cb.addEventListener('change', function () { saveWhere(c); });
+      boxes.appendChild(el('label', { title: p[1] }, [cb, el('span', { text: p[1] })]));
     });
 
     $('.preview-btn', node).addEventListener('click', function () { previewEffect(c); });
@@ -169,7 +162,7 @@
   function colorLabel(pattern, i) {
     var names = {
       flash: ['On', 'Off'], sweep: ['Band', 'Background'], sparkle: ['Base', 'Sparkle', 'Sparkle'],
-      mix: ['Color 1', 'Color 2'], wave: ['Color 1', 'Color 2', 'Color 3'], gauge: ['Fill', 'Empty'], gaugeFade: ['Full', 'Empty'],
+      mix: ['Color 1', 'Color 2'], wave: ['Color 1', 'Color 2', 'Color 3'], gauge: ['Fill', 'Empty'], gaugeFade: ['Full', 'Empty'], gaugeColor: ['Full', 'Half', 'Empty'],
     };
     return (names[pattern] && names[pattern][i]) || (i === 0 ? 'Color' : 'Color ' + (i + 1));
   }
@@ -177,23 +170,54 @@
   function updateUsed(c) {
     var used = usedBy(c.def.name);
     $('.used', c.el).textContent = used.length ? 'Used by: ' + used.join(', ') : 'Not used by any rule';
-    // Where selector mirrors the rules using this effect ("Mixed" if they differ).
-    var where = $('.where', c.el);
-    if (!where || !data.rules) return;
-    var keys = data.rules.rules.filter(function (r) { return r.effect === c.def.name; })
-      .map(function (r) { return (r.zones ? [].concat(r.zones) : ['all']).join(','); });
-    var uniq = keys.filter(function (k, i) { return keys.indexOf(k) === i; });
-    where.textContent = '';
-    WHERE.forEach(function (w) { where.appendChild(el('option', { value: w[0], text: w[1] })); });
-    if (uniq.length === 1 && !WHERE.some(function (w) { return w[0] === uniq[0]; })) {
-      where.appendChild(el('option', { value: uniq[0], text: 'Custom: ' + uniq[0] }));
-    }
-    if (uniq.length > 1) where.appendChild(el('option', { value: '', text: 'Mixed (see Rules)', disabled: 'disabled' }));
-    where.value = uniq.length === 1 ? uniq[0] : uniq.length > 1 ? '' : 'all';
-    where.disabled = !keys.length;
-    where.title = keys.length ? 'Applies to: ' + usedBy(c.def.name).concat(
-      data.rules.rules.filter(function (r) { return r.effect === c.def.name && r.enabled === false; }).map(function (r) { return r.name + ' (off)'; })
-    ).join(', ') : 'No rule uses this effect';
+    // Checkboxes mirror the rules using this effect (a note says so if they differ).
+    var boxes = $('.where-boxes', c.el);
+    if (!boxes || !data.rules) return;
+    var rules = data.rules.rules.filter(function (r) { return r.effect === c.def.name; });
+    var sets = rules.map(function (r) { return expand(r.zones); });
+    var keys = sets.map(function (s) { return s.join(','); });
+    var mixed = keys.some(function (k) { return k !== keys[0]; });
+    var on = sets[0] || [];
+    boxes.querySelectorAll('input').forEach(function (cb) { cb.checked = on.indexOf(cb.value) >= 0; });
+    boxes.classList.toggle('disabled', !rules.length);
+    $('.where-note', c.el).textContent = !rules.length ? 'No rule uses this effect'
+      : mixed ? 'Rules using it differ (showing ' + rules[0].name + '); ticking a box sets them all' : '';
+  }
+
+  // Zone groups -> list of parts, in PARTS order.
+  function expand(zones) {
+    var list = zones ? [].concat(zones) : ['all'];
+    var out = [];
+    list.forEach(function (z) {
+      var add = z === 'all' ? PARTS.map(function (p) { return p[0]; })
+        : z === 'pc' ? PARTS.slice(1).map(function (p) { return p[0]; }) : [z];
+      add.forEach(function (a) { if (out.indexOf(a) < 0) out.push(a); });
+    });
+    return PARTS.map(function (p) { return p[0]; }).filter(function (p) { return out.indexOf(p) >= 0; });
+  }
+
+  // Parts -> the shortest zones list ("all", "pc", or the parts themselves).
+  function compact(parts) {
+    if (parts.length === PARTS.length) return ['all'];
+    var pc = PARTS.slice(1).map(function (p) { return p[0]; });
+    if (parts.length === pc.length && pc.every(function (p) { return parts.indexOf(p) >= 0; })) return ['pc'];
+    return parts;
+  }
+
+  function saveWhere(c) {
+    if (!data.rules) return;
+    var parts = [];
+    $('.where-boxes', c.el).querySelectorAll('input').forEach(function (cb) { if (cb.checked) parts.push(cb.value); });
+    if (!parts.length) { status(c, 'Pick at least one place', 'err'); updateUsed(c); return; }
+    var next = JSON.parse(JSON.stringify(data.rules));
+    next.rules.forEach(function (r) { if (r.effect === c.def.name) r.zones = compact(parts); });
+    status(c, 'Saving…');
+    api('PUT', '/api/rules', next).then(function (d) {
+      data.rules = d;
+      if (!rulesDirty) renderRules();
+      updateUsed(c);
+      status(c, 'Saved', 'good');
+    }).catch(function (e) { status(c, e.message, 'err'); updateUsed(c); });
   }
 
   function status(c, msg, cls) {
@@ -252,6 +276,12 @@
 
   // ---------- rules ----------
 
+  // Light groups, in display order (keys are the bridge's zone names).
+  var PARTS = [
+    ['ceiling', 'Ceiling'], ['radiator', 'Liquid cooling fans'], ['rear', 'Back fan'],
+    ['back', 'Right fans'], ['bottom', 'Bottom fans'], ['strip', 'Side strip'],
+  ];
+
   var WHERE = [
     ['all', 'Everywhere'], ['pc', 'PC only'], ['ceiling', 'Ceiling only'],
     ['radiator', 'Liquid cooling fans'], ['rear', 'Back fan (left)'], ['back', 'Right fans'], ['bottom', 'Bottom fans'], ['strip', 'Side strip'],
@@ -263,6 +293,8 @@
     PLAYER_ALIVE: 'You come back to life',
     PLAYER_LOW_HEALTH_START: 'Your health drops below the threshold',
     PLAYER_LOW_MANA_START: 'Your mana drops below the threshold',
+    PLAYER_MANA_FULL: 'Your mana fills back up to 100%',
+    PLAYER_HEALTH_FULL: 'Your health fills back up to 100%',
     MANA_AVAILABLE: 'Always, while you have a mana bar (shows it live)',
     HEALTH_AVAILABLE: 'Always, while you play (shows your health live)',
     PLAYER_COMBAT_START: 'You enter combat',
@@ -319,7 +351,10 @@
       var cur = r.zones ? [].concat(r.zones) : ['all'];
       var curKey = cur.join(',');
       WHERE.forEach(function (w) { where.appendChild(el('option', { value: w[0], text: w[1] })); });
-      if (!WHERE.some(function (w) { return w[0] === curKey; })) where.appendChild(el('option', { value: curKey, text: 'Custom: ' + curKey }));
+      if (!WHERE.some(function (w) { return w[0] === curKey; })) {
+        var names = expand(cur).map(function (k) { var p = PARTS.filter(function (x) { return x[0] === k; })[0]; return p ? p[1] : k; });
+        where.appendChild(el('option', { value: curKey, text: names.join(' + ') }));
+      }
       where.value = curKey;
       where.addEventListener('change', function () { r.zones = where.value.split(','); markRules(); });
 
@@ -396,6 +431,21 @@
 
   var form = $('#settings');
   var AMB_FIELDS = ['ambGain', 'ambSaturation', 'ambFloor', 'ambSmoothMs'];
+  function pctLabel(k) {
+    $('#' + k + '-val').textContent = Math.round(Number(form[k].value) * 100) + '%';
+  }
+
+  function gaugeTest(source, where) {
+    var st = $('#gauge-test-status');
+    api('POST', '/api/test/gauge-demo', { source: source, secs: 16 }).then(function () {
+      st.textContent = 'Watch the ' + where + ': draining, refilling, then a double flash…';
+      st.className = 'status';
+      setTimeout(function () { st.textContent = 'Done'; st.className = 'status good'; }, 17500);
+    }).catch(function (e) { st.textContent = e.message; st.className = 'status err'; });
+  }
+  $('#gauge-test').addEventListener('click', function () { gaugeTest('mana', 'side strip'); });
+  $('#gauge-test-hp').addEventListener('click', function () { gaugeTest('health', 'liquid cooling fans'); });
+
   function ambLabel(k) {
     var v = Number(form[k].value);
     $('#' + k + '-val').textContent = k === 'ambFloor' ? Math.round(v * 100) + '%' : k === 'ambSmoothMs' ? v + ' ms' : v.toFixed(1) + 'x';
@@ -411,6 +461,10 @@
     form.zonesEnabled.checked = s.zonesEnabled;
     form.ceilingEnabled.checked = s.ceilingEnabled;
     form.watchdogEnabled.checked = s.watchdogEnabled;
+    form.stripGaugeReverse.checked = s.stripGaugeReverse;
+    form.stripGaugeStart.value = s.stripGaugeStart;
+    form.stripGaugeEnd.value = s.stripGaugeEnd;
+    ['stripGaugeStart', 'stripGaugeEnd'].forEach(pctLabel);
     form.ceilingColor.value = s.ceilingColor;
     AMB_FIELDS.forEach(function (k) { form[k].value = s[k]; ambLabel(k); });
     form.minApplyIntervalMs.value = s.minApplyIntervalMs;
@@ -431,6 +485,7 @@
     if (e.target.name === 'lowHealthThreshold') $('#thr-val').textContent = e.target.value + '%';
     if (e.target.name === 'lowManaThreshold') $('#mthr-val').textContent = e.target.value + '%';
     if (AMB_FIELDS.indexOf(e.target.name) >= 0) ambLabel(e.target.name);
+    if (e.target.name === 'stripGaugeStart' || e.target.name === 'stripGaugeEnd') pctLabel(e.target.name);
     settingsDirty = true;
     $('button[type=submit]', form).disabled = false;
     $('#settings-status').textContent = 'Unsaved changes';
@@ -446,6 +501,9 @@
       zonesEnabled: form.zonesEnabled.checked,
       ceilingEnabled: form.ceilingEnabled.checked,
       watchdogEnabled: form.watchdogEnabled.checked,
+      stripGaugeReverse: form.stripGaugeReverse.checked,
+      stripGaugeStart: Number(form.stripGaugeStart.value),
+      stripGaugeEnd: Number(form.stripGaugeEnd.value),
       ceilingColor: form.ceilingColor.value,
       ambGain: Number(form.ambGain.value),
       ambSaturation: Number(form.ambSaturation.value),

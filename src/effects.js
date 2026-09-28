@@ -24,9 +24,11 @@ const DEFAULT_EFFECTS = {
   death:     { name: 'WoW Death',       pattern: 'solid',   colors: ['#ff0000'], brightness: 100 },
   ghost:     { name: 'WoW Ghost',       pattern: 'mix',     colors: ['#ffffff', '#5ec8ff'], speedMs: 4500, floor: 25, drift: 30, brightness: 100 },
   lowHealth: { name: 'WoW Low Health',  pattern: 'pulse',   colors: ['#ff0000'], speedMs: 1100, floor: 10, brightness: 100 },
-  health:    { name: 'WoW Health',      pattern: 'gauge',   colors: ['#1fd11f', '#021402'], brightness: 100, source: 'health' },
+  health:    { name: 'WoW Health',      pattern: 'gaugeColor', colors: ['#00ff00', '#ffd000', '#ff0000'], brightness: 100, source: 'health' },
+  healthFull: { name: 'WoW Health Full', pattern: 'flash',  colors: ['#5dff5d', '#000000'], speedMs: 500, brightness: 100 },
   mana:      { name: 'WoW Mana',        pattern: 'gauge',   colors: ['#0050ff', '#000614'], brightness: 100, source: 'mana' },
   lowMana:   { name: 'WoW Low Mana',    pattern: 'pulse',   colors: ['#0080ff'], speedMs: 700, floor: 5, brightness: 100 },
+  manaFull:  { name: 'WoW Mana Full',   pattern: 'flash',   colors: ['#4aa0ff', '#000000'], speedMs: 500, brightness: 100 },
   bossFight: { name: 'WoW Boss Fight',  pattern: 'wave',    colors: ['#ff4000', '#801000', '#ff9000'], speedMs: 4000, brightness: 100 },
   victory:   { name: 'WoW Victory',     pattern: 'sparkle', colors: ['#ffb000', '#ffffff', '#ffe066'], speedMs: 900, floor: 30, density: 60, brightness: 100 },
   wipe:      { name: 'WoW Wipe',        pattern: 'sweep',   colors: ['#ff2000', '#1a0000'], speedMs: 1600, width: 35, brightness: 100 },
@@ -263,6 +265,8 @@ ${PATTERNS_SRC}
       if (zoneState[z].idx !== idx) zoneState[z] = { idx: idx, state: {}, t0: t };
       var def = DATA.designs[idx - 1], st = zoneState[z].state;
       if (def.source) st.level = levels[def.source] || 0;
+      st.range = zone.gaugeRange || null;
+      st.reverse = !!zone.gaugeReverse;
       for (var a = 0; a < areas.length; a++) {
         var r = areas[a].rect;
         ctx.save();

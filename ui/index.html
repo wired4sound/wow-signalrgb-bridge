@@ -103,6 +103,18 @@
           <small>Pick black to turn the cans off while you play.</small>
         </label>
         <fieldset class="amb">
+          <legend>Side strip bar (mana/health gauge calibration)</legend>
+          <label class="field check">
+            <input type="checkbox" name="stripGaugeReverse">
+            <span>Reverse direction</span>
+            <small>Tick this if the bar empties toward the wrong end.</small>
+          </label>
+          <label class="field"><span>Visible part starts at <b id="stripGaugeStart-val"></b></span><input type="range" name="stripGaugeStart" min="0" max="0.9" step="0.01"></label>
+          <label class="field"><span>Visible part ends at <b id="stripGaugeEnd-val"></b></span><input type="range" name="stripGaugeEnd" min="0.1" max="1" step="0.01">
+            <small>If the bar doesn't move for the first bit of mana, some LEDs are out of view: move these in until it reacts right away.</small></label>
+          <div class="bar-actions"><button type="button" id="gauge-test">Test mana bar (16s drain and refill)</button><button type="button" id="gauge-test-hp">Test health (radiator)</button><span class="status" id="gauge-test-status"></span></div>
+        </fieldset>
+        <fieldset class="amb">
           <legend>Game world colors (ceiling ambience)</legend>
           <label class="field"><span>Brightness boost <b id="ambGain-val"></b></span><input type="range" name="ambGain" min="0.5" max="6" step="0.1"></label>
           <label class="field"><span>Color boost <b id="ambSaturation-val"></b></span><input type="range" name="ambSaturation" min="0" max="3" step="0.1"></label>
@@ -167,7 +179,7 @@
           <span class="running" hidden>running</span>
         </div>
         <div class="used"></div>
-        <label class="field compact"><span>Where it shows</span><select class="where"></select></label>
+        <div class="field compact"><span>Where it shows</span><div class="where-boxes"></div><small class="where-note"></small></div>
         <label class="field compact"><span>Pattern</span><select class="pattern"></select></label>
         <div class="colors"></div>
         <div class="params"></div>

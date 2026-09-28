@@ -35,10 +35,11 @@
     },
     "health": {
       "name": "WoW Health",
-      "pattern": "gauge",
+      "pattern": "gaugeColor",
       "colors": [
-        "#1fd11f",
-        "#021402"
+        "#00ff00",
+        "#ffd000",
+        "#ff0000"
       ],
       "brightness": 100,
       "source": "health"

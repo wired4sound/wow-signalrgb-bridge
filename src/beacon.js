@@ -84,7 +84,7 @@ class BeaconTracker {
     this.lastResultAt = 0; // when the beacon last reported a kill or wipe (0 = never)
     this.state = {
       dead: false, ghost: false, lowHealth: false, combat: false, encounter: false, won: false, wiped: false,
-      manaOn: false, lowMana: false,
+      manaOn: false, lowMana: false, manaFullArmed: false, hpFullArmed: false,
     };
   }
 
@@ -139,6 +139,24 @@ class BeaconTracker {
     if (manaOn !== s.manaOn) {
       s.manaOn = manaOn;
       out.push(this.ev(manaOn ? 'MANA_AVAILABLE' : 'MANA_UNAVAILABLE'));
+    }
+    // Health full again: same idea (fires once back at 100% after dipping below 97%).
+    if (!s.dead) {
+      if (r.hp < 0.97) s.hpFullArmed = true;
+      else if (s.hpFullArmed && r.hp >= 0.995) {
+        s.hpFullArmed = false;
+        out.push(this.ev('PLAYER_HEALTH_FULL', { hp: r.hp }));
+      }
+    } else {
+      s.hpFullArmed = false; // a revive at full isn't a heal
+    }
+    // Mana full again: fires once when mana gets back to 100% after dipping below 97%.
+    if (manaOn && !s.dead) {
+      if (r.mana < 0.97) s.manaFullArmed = true;
+      else if (s.manaFullArmed && r.mana >= 0.995) {
+        s.manaFullArmed = false;
+        out.push(this.ev('PLAYER_MANA_FULL', { mana: r.mana }));
+      }
     }
     if (s.lowMana && (!manaOn || s.dead)) {
       s.lowMana = false;

@@ -102,6 +102,7 @@ function createServer(app, { port = 17700, onShutdown = null } = {}) {
     ['POST', /^\/api\/preview$/, (m, body) => app.preview(body.effect, body.ms)],
     ['POST', /^\/api\/preview\/stop$/, () => { app.stopPreview(); return { ok: true }; }],
     ['POST', /^\/api\/test\/gauge$/, (m, body) => app.fakeGauge(body.source, body.value, body.ms)],
+    ['POST', /^\/api\/test\/gauge-demo$/, (m, body) => app.gaugeDemo(body.source, body.secs)],
     ['GET', /^\/api\/signalrgb\/effects$/, async () => (await app.listSignalRGBEffects()).map((e) => e.name)],
   ];
 

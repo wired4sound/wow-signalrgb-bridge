@@ -13,5 +13,16 @@
   "baseline": null,
   "watchdog": {
     "enabled": true
+  },
+  "zones": {
+    "gaugeReverse": {
+      "strip": true
+    },
+    "gaugeRange": {
+      "strip": [
+        0,
+        0.85
+      ]
+    }
   }
 }

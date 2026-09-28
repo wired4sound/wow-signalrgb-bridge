@@ -58,7 +58,7 @@
       "event": "PLAYER_LOW_HEALTH_START",
       "effect": "WoW Low Health",
       "zones": [
-        "pc"
+        "back"
       ],
       "priority": 80,
       "clearOn": [
@@ -82,6 +82,27 @@
           "event": "PLAYER_LOW_MANA_END"
         }
       ]
+    },
+    {
+      "name": "Health Full",
+      "event": "PLAYER_HEALTH_FULL",
+      "effect": "WoW Health Full",
+      "zones": [
+        "radiator",
+        "back"
+      ],
+      "priority": 72,
+      "durationMs": 1000
+    },
+    {
+      "name": "Mana Full",
+      "event": "PLAYER_MANA_FULL",
+      "effect": "WoW Mana Full",
+      "zones": [
+        "strip"
+      ],
+      "priority": 72,
+      "durationMs": 1000
     },
     {
       "name": "Bloodlust",
@@ -130,7 +151,8 @@
       "event": "HEALTH_AVAILABLE",
       "effect": "WoW Health",
       "zones": [
-        "radiator"
+        "radiator",
+        "rear"
       ],
       "priority": 26,
       "clearOn": [

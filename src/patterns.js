@@ -19,6 +19,9 @@
     // Same live value, but every light shows it at once (fades Empty -> Fill), so it
     // doesn't depend on where devices sit in the SignalRGB layout.
     gaugeFade: { label: 'Live gauge (all lights fade)', colors: 2, params: ['brightness'], live: true },
+    // Every light shows one color that moves Full -> Middle -> Empty with the value
+    // (e.g. health: green -> yellow -> red).
+    gaugeColor: { label: 'Live color (full / middle / empty)', colors: 3, params: ['brightness'], live: true },
   };
 
   var PARAMS = {
@@ -169,7 +172,8 @@
       }
 
       case 'gauge':
-      case 'gaugeFade': {
+      case 'gaugeFade':
+      case 'gaugeColor': {
         var target = typeof state.level === 'number' ? Math.min(1, Math.max(0, state.level))
           : Math.sin(tMs / 1600) * 0.5 + 0.5;
         var gdt = state.gaugeT === undefined ? 1000 : Math.max(0, tMs - state.gaugeT);
@@ -182,10 +186,23 @@
           ctx.fillRect(0, 0, w, h);
           break;
         }
+        if (c.pattern === 'gaugeColor') {
+          var col = lvl >= 0.5 ? lerp(c.colors[1], c.colors[0], (lvl - 0.5) * 2) : lerp(c.colors[2], c.colors[1], lvl * 2);
+          ctx.fillStyle = css(col, B);
+          ctx.fillRect(0, 0, w, h);
+          break;
+        }
+        // Calibration (per zone, set by the compositor): the visible LEDs only cover
+        // state.range[0]..state.range[1] of the canvas width; state.reverse anchors the bar
+        // at the range's right end so it empties toward it. Lit interval: [lo, hi].
+        var r0 = state.range ? state.range[0] : 0, r1 = state.range ? state.range[1] : 1;
+        var full = lvl >= 0.999, lo, hi;
+        if (state.reverse) { lo = full ? 0 : r1 - lvl * (r1 - r0); hi = 1; }
+        else { lo = 0; hi = full ? 1 : r0 + lvl * (r1 - r0); }
         stripes(ctx, w, h, function (x) {
           var from = x, to = x + 1 / STRIPES;
-          var cover = lvl >= to ? 1 : lvl <= from ? 0 : (lvl - from) * STRIPES;
-          return css(lerp(c.colors[1], c.colors[0], cover), B);
+          var cover = Math.max(0, Math.min(to, hi) - Math.max(from, lo)) * STRIPES;
+          return css(lerp(c.colors[1], c.colors[0], Math.min(1, cover)), B);
         });
         break;
       }

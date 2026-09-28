@@ -66,6 +66,31 @@ test('beacon: mana gauge availability and low mana with hysteresis', () => {
     ['PLAYER_LOW_MANA_END', 'MANA_UNAVAILABLE', 'HEALTH_UNAVAILABLE', 'BEACON_DOWN']);
 });
 
+test('beacon: mana full fires once after a real dip', () => {
+  const b = new BeaconTracker();
+  const m = (mana, over = {}) => ok({ hasMana: true, mana, ...over });
+  b.update(m(1), 0);
+  assert.deepStrictEqual(names(b.update(m(0.98), 10)), [], 'tiny dip: not armed');
+  assert.deepStrictEqual(names(b.update(m(1), 20)), []);
+  b.update(m(0.6), 30);
+  assert.deepStrictEqual(names(b.update(m(0.99), 40)), [], 'not full yet');
+  assert.deepStrictEqual(names(b.update(m(1), 50)), ['PLAYER_MANA_FULL']);
+  assert.deepStrictEqual(names(b.update(m(1), 60)), [], 'only once');
+  b.update(m(0.5), 70);
+  assert.deepStrictEqual(names(b.update(m(1, { dead: true, hp: 0 }), 80)), ['PLAYER_DIED'], 'not while dead');
+});
+
+test('beacon: health full fires once after a real dip, not on revive', () => {
+  const b = new BeaconTracker();
+  b.update(ok({ hp: 1 }), 0);
+  b.update(ok({ hp: 0.5 }), 10);
+  assert.ok(names(b.update(ok({ hp: 1 }), 20)).includes('PLAYER_HEALTH_FULL'));
+  assert.deepStrictEqual(names(b.update(ok({ hp: 1 }), 30)), [], 'only once');
+  b.update(ok({ hp: 0.4 }), 40);
+  b.update(ok({ hp: 0, dead: true }), 50);
+  assert.ok(!names(b.update(ok({ hp: 1 }), 60)).includes('PLAYER_HEALTH_FULL'), 'revived at full: no flash');
+});
+
 test('gauge image encodes the value in its size', () => {
   const { gaugeImage } = require('../src/server');
   const size = (buf) => [buf.readInt32LE(18), buf.readInt32LE(22)];
@@ -243,6 +268,47 @@ test('patterns: every pattern renders without throwing and fills the canvas', ()
     assert.ok(fills.length > 0, name);
     assert.ok(fills.every((f) => /^rgb\(\d+,\d+,\d+\)$/.test(f)), `${name}: ${fills.find((f) => !/^rgb/.test(f))}`);
   }
+});
+
+test('patterns: gauge calibration range and reverse direction', () => {
+  // 32 stripes across the canvas; returns which stripes are lit (fill color) for a level.
+  const lit = (level, state) => {
+    const fills = [];
+    const ctx = { set fillStyle(v) { fills.push(v); }, fillRect() {} };
+    const st = { ...state, level, shown: level, gaugeT: 0 };
+    patterns.render(ctx, 320, 200, 0, { pattern: 'gauge', colors: ['#ffffff', '#000000'] }, st);
+    return fills.map((f) => (f === 'rgb(255,255,255)' ? 1 : f === 'rgb(0,0,0)' ? 0 : 0.5));
+  };
+  const count = (a) => a.filter((v) => v === 1).length;
+  // Plain: 50% lights the left half.
+  let a = lit(0.5, {});
+  assert.strictEqual(count(a), 16);
+  assert.strictEqual(a[0], 1);
+  assert.strictEqual(a[31], 0);
+  // Reverse: 50% lights the right half.
+  a = lit(0.5, { reverse: true });
+  assert.strictEqual(a[0], 0);
+  assert.strictEqual(a[31], 1);
+  // Range [0, 0.75] + reverse: the right quarter (hidden) stays lit; 100% -> 0% sweeps 0..0.75.
+  a = lit(0.99, { reverse: true, range: [0, 0.75] });
+  assert.ok(a[0] < 1 && a[31] === 1, 'just below full: leftmost stripe starts to empty');
+  a = lit(0, { reverse: true, range: [0, 0.75] });
+  assert.strictEqual(count(a), 8, 'empty: only the hidden right quarter is lit');
+  a = lit(1, { reverse: true, range: [0, 0.75] });
+  assert.strictEqual(count(a), 32);
+});
+
+test('patterns: live color goes full -> middle -> empty', () => {
+  const color = (level) => {
+    let fill;
+    const ctx = { set fillStyle(v) { fill = v; }, fillRect() {} };
+    patterns.render(ctx, 320, 200, 0, { pattern: 'gaugeColor', colors: ['#00ff00', '#ffd000', '#ff0000'] },
+      { level, shown: level, gaugeT: 0 });
+    return fill;
+  };
+  assert.strictEqual(color(1), 'rgb(0,255,0)');
+  assert.strictEqual(color(0.5), 'rgb(255,208,0)');
+  assert.strictEqual(color(0), 'rgb(255,0,0)');
 });
 
 // ---------- app + API ----------
@@ -584,6 +650,22 @@ test('watchdog: silent effect is re-applied, then SignalRGB is restarted', async
     await sleep(40);
     t.app.watchdog(Date.now() + 60000);
     assert.strictEqual(t.app.wd.step, 0);
+  } finally {
+    await t.close();
+  }
+});
+
+test('whole-effect mode skips part-only gauges but keeps part-only alerts', async () => {
+  const t = await startApp(); // zones off
+  try {
+    // Health Gauge (radiator only, live gauge) is active once the beacon is up: skipped.
+    t.reader.emit('reading', ok());
+    await sleep(40);
+    assert.strictEqual(t.srgb.state.current, 'Solid Color');
+    // Low Health (right fans only, an alert) still shows on everything.
+    t.reader.emit('reading', ok({ hp: 0.1 }));
+    await sleep(40);
+    assert.strictEqual(t.srgb.state.current, 'WoW Low Health');
   } finally {
     await t.close();
   }

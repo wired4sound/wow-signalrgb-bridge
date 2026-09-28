@@ -37,6 +37,9 @@ const EDITABLE = {
   ambSmoothMs: (v) => Math.round(num(v, 0, 5000)),
   ceilingEnabled: (v) => !!v,
   watchdogEnabled: (v) => !!v,
+  stripGaugeStart: (v) => num(v, 0, 0.9),
+  stripGaugeEnd: (v) => num(v, 0.1, 1),
+  stripGaugeReverse: (v) => !!v,
   ceilingColor: (v) => {
     if (!/^#[0-9a-f]{6}$/i.test(String(v))) throw new Error('must be a #rrggbb color');
     return String(v).toLowerCase();
@@ -118,11 +121,14 @@ class BridgeApp {
       log: this.log,
     });
     this.engine = new RuleEngine(this.rules, this.controller, { log: this.log });
-    // Whole-effect mode (no compositor): a rule that only targets part of the PC (e.g. the
-    // health gauge on the radiator) can't take over every light, so it is skipped there.
+    // Whole-effect mode (no compositor): an always-on gauge that only targets part of the PC
+    // (e.g. the health gauge on the radiator) would take over every light for good, so it
+    // is skipped there. Alerts and flashes aimed at one part still show (on everything).
     this.controller.wholeFilter = (e) => {
       const rule = this.rules.find((r) => r.name === e.key);
-      return !rule || zonesLib.GROUPS.pc.every((z) => rule.zones.includes(z));
+      if (!rule || zonesLib.GROUPS.pc.every((z) => rule.zones.includes(z))) return true;
+      const design = Object.values(this.effects).find((d) => d.name === rule.effect);
+      return !(design && design.source);
     };
 
     this.parser = new CombatLogParser();
@@ -149,7 +155,15 @@ class BridgeApp {
   zoneList() {
     const rects = { ...zonesLib.DEFAULT_RECTS, ...(this.cfg.zones.rects || {}) };
     const parts = { ...zonesLib.DEFAULT_PARTS, ...(this.cfg.zones.parts || {}) };
-    return zonesLib.ZONE_NAMES.map((name) => ({ name, rect: rects[name], parts: parts[name] || [] }));
+    const ranges = this.cfg.zones.gaugeRange || {};
+    const reverse = this.cfg.zones.gaugeReverse || {};
+    return zonesLib.ZONE_NAMES.map((name) => {
+      const z = { name, rect: rects[name], parts: parts[name] || [] };
+      const r = ranges[name];
+      if (Array.isArray(r) && r.length === 2 && !(r[0] === 0 && r[1] === 1)) z.gaugeRange = r;
+      if (reverse[name]) z.gaugeReverse = true;
+      return z;
+    });
   }
 
   designIndex() {
@@ -421,6 +435,26 @@ class BridgeApp {
     return { ok: true };
   }
 
+  // Drains a fake gauge from 100% to 0% and refills it over `secs` (settings page "Test").
+  gaugeDemo(source = 'mana', secs = 16) {
+    const total = Math.round(num(secs, 4, 60) * 1000);
+    clearInterval(this.demoTimer);
+    const t0 = Date.now();
+    this.demoTimer = setInterval(() => {
+      const p = (Date.now() - t0) / total;
+      if (p >= 1) {
+        clearInterval(this.demoTimer);
+        this.gaugeOverride = null;
+        // Refilled: show what a real refill does (the Mana Full flash).
+        if (source === 'mana') this.dispatch(this.beacon.ev('PLAYER_MANA_FULL', { mana: 1, demo: true }));
+        if (source === 'health') this.dispatch(this.beacon.ev('PLAYER_HEALTH_FULL', { hp: 1, demo: true }));
+        return;
+      }
+      this.fakeGauge(source, p < 0.5 ? 1 - p * 2 : (p - 0.5) * 2, 400);
+    }, 100);
+    return { ok: true, ms: total };
+  }
+
   stopPreview() {
     this.controller.clear(PREVIEW_KEY, 'stopped');
   }
@@ -498,6 +532,9 @@ class BridgeApp {
       ceilingEnabled: this.cfg.zones.ceiling.enabled,
       ceilingColor: this.cfg.zones.ceiling.color,
       watchdogEnabled: this.cfg.watchdog.enabled,
+      stripGaugeStart: (this.cfg.zones.gaugeRange?.strip || [0, 1])[0],
+      stripGaugeEnd: (this.cfg.zones.gaugeRange?.strip || [0, 1])[1],
+      stripGaugeReverse: !!this.cfg.zones.gaugeReverse?.strip,
     };
   }
 
@@ -511,6 +548,15 @@ class BridgeApp {
     for (const [k, v] of Object.entries(clean)) {
       if (k === 'beaconEnabled') raw.beacon = { ...(raw.beacon || {}), enabled: v };
       else if (k === 'watchdogEnabled') raw.watchdog = { ...(raw.watchdog || {}), enabled: v };
+      else if (k === 'stripGaugeStart' || k === 'stripGaugeEnd') {
+        raw.zones = { ...(raw.zones || {}) };
+        const cur = (raw.zones.gaugeRange && raw.zones.gaugeRange.strip) || [0, 1];
+        const next = k === 'stripGaugeStart' ? [v, cur[1]] : [cur[0], v];
+        raw.zones.gaugeRange = { ...(raw.zones.gaugeRange || {}), strip: next };
+      } else if (k === 'stripGaugeReverse') {
+        raw.zones = { ...(raw.zones || {}) };
+        raw.zones.gaugeReverse = { ...(raw.zones.gaugeReverse || {}), strip: v };
+      }
       else if (k === 'zonesEnabled') raw.zones = { ...(raw.zones || {}), enabled: v };
       else if (AMB_KEYS[k]) {
         raw.zones = { ...(raw.zones || {}) };
@@ -530,8 +576,13 @@ class BridgeApp {
     }
     if ('lowManaThreshold' in clean) this.beacon.manaThreshold = this.cfg.lowManaThreshold;
     if (Object.keys(clean).some((k) => AMB_KEYS[k])) Object.assign(this.ambience.opts, this.cfg.zones.ambience);
-    if ('ceilingColor' in clean) {
-      // The room light color is baked into the compositor effect: rewrite and reload it.
+    if ('stripGaugeStart' in clean || 'stripGaugeEnd' in clean) {
+      const r = this.cfg.zones.gaugeRange.strip;
+      if (!(r[1] > r[0] + 0.05)) throw new Error('the bar must end at least 5% after it starts');
+    }
+    if (['ceilingColor', 'stripGaugeStart', 'stripGaugeEnd', 'stripGaugeReverse'].some((k) => k in clean)) {
+      // The room light color and gauge calibration are baked into the compositor effect:
+      // rewrite and reload it.
       this.installEffects();
       this.controller.reapply(effectsLib.COMPOSITOR_NAME);
     }
@@ -596,6 +647,7 @@ class BridgeApp {
     this.stopping = true;
     this.log.info('Stopping, restoring baseline');
     clearInterval(this.tickTimer);
+    clearInterval(this.demoTimer);
     this.stopLog();
     if (this.beaconRunning) { this.beaconRunning = false; this.beaconReader.stop(); }
     await this.controller.shutdown();
