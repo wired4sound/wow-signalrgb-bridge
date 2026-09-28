@@ -281,6 +281,7 @@ async function startApp({ dryRun = false, zones = false } = {}) {
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({
     logsDir: logs, minApplyIntervalMs: 0, ui: { port: 0 }, beacon: { graceMs: 400 },
     zones: { enabled: zones, ambience: { gain: 1, saturation: 1, floor: 0, smoothMs: 0 } },
+    watchdog: { enabled: false },
   }));
   fs.copyFileSync(path.join(__dirname, '..', 'rules.json'), path.join(dir, 'rules.json'));
   const reader = new FakeReader();
@@ -538,6 +539,45 @@ test('api: zones compositor while in game, zone words and ambience over the imag
     assert.strictEqual(((await word('z0')) >> 4) & 15, deathIdx, 'PC still shows death');
     assert.match(fs.readFileSync(path.join(t.dir, 'Effects', 'WoW Bridge.html'), 'utf8'), /"room":"#112233"/);
     assert.strictEqual((await t.call('PUT', '/api/settings', { ceilingColor: 'red' })).status, 400);
+  } finally {
+    await t.close();
+  }
+});
+
+test('watchdog: silent effect is re-applied, then SignalRGB is restarted', async () => {
+  const t = await startApp();
+  try {
+    t.app.cfg.watchdog = { enabled: true, staleMs: 1000 };
+    await t.call('POST', '/api/preview', { effect: 'WoW Death', ms: 60000 });
+    await sleep(40);
+    const t0 = Date.now();
+    const applies = () => t.srgb.state.applied.filter((n) => n === 'WoW Death').length;
+    const first = applies();
+    // Reporting normally: nothing happens.
+    t.app.effectPing({ name: 'WoW Death', frames: 10 });
+    t.app.watchdog(t0 + 500);
+    assert.strictEqual(t.app.wd.step, 0);
+    // Silent past staleMs: re-apply.
+    t.app.watchdog(t0 + 5000);
+    await sleep(40);
+    assert.strictEqual(t.app.wd.step, 1);
+    assert.strictEqual(applies(), first + 1, 're-applied');
+    // A report after the re-apply clears it.
+    t.app.effectPing({ name: 'WoW Death', frames: 1 });
+    t.app.watchdog(Date.now() + 100);
+    assert.strictEqual(t.app.wd.step, 0);
+    // Silent again (simulated time well past the last grace period): re-apply, then restart.
+    t.app.watchdog(t0 + 30000);
+    await sleep(40);
+    assert.strictEqual(t.app.wd.step, 1);
+    t.app.watchdog(t0 + 60000);
+    await sleep(40);
+    assert.strictEqual(t.restarts(), 1);
+    // Not a bridge effect: the watchdog stays out of it.
+    await t.call('POST', '/api/preview', { effect: 'Rainbow', ms: 60000 });
+    await sleep(40);
+    t.app.watchdog(Date.now() + 60000);
+    assert.strictEqual(t.app.wd.step, 0);
   } finally {
     await t.close();
   }

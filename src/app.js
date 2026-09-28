@@ -36,6 +36,7 @@ const EDITABLE = {
   ambFloor: (v) => num(v, 0, 0.5),
   ambSmoothMs: (v) => Math.round(num(v, 0, 5000)),
   ceilingEnabled: (v) => !!v,
+  watchdogEnabled: (v) => !!v,
   ceilingColor: (v) => {
     if (!/^#[0-9a-f]{6}$/i.test(String(v))) throw new Error('must be a #rrggbb color');
     return String(v).toLowerCase();
@@ -136,6 +137,7 @@ class BridgeApp {
     this.logState = { dir: null, file: null, lastLineAt: null, lines: 0, player: null, error: null };
     this.ambience = new zonesLib.Ambience(this.cfg.zones.ambience);
     this.compositorListed = false; // does SignalRGB list the "WoW Bridge" effect yet?
+    this.wd = { step: 0, okAt: 0, restartAt: 0, restarting: false };
   }
 
   zoneList() {
@@ -201,7 +203,40 @@ class BridgeApp {
     this.tickTimer = setInterval(() => {
       this.feedBeacon(null);
       if (ticks++ % 5 === 0) this.checkSignalRGB();
+      this.watchdog();
     }, 1000);
+  }
+
+  // SignalRGB's effect engine can stall (seen after a long idle afternoon): it keeps
+  // reporting the effect as active but runs nothing, and the lights freeze on the last
+  // frame. Every bridge effect pings every 3s, so: no ping for staleMs after it was
+  // applied -> re-apply; still nothing -> restart SignalRGB (at most every 10 minutes).
+  watchdog(now = Date.now()) {
+    const wd = this.cfg.watchdog;
+    if (!wd.enabled || this.opts.dryRun || this.stopping) return;
+    const name = this.controller.status().showing;
+    const ours = name === effectsLib.COMPOSITOR_NAME || Object.values(this.effects).some((e) => e.name === name);
+    if (!ours || !name || this.wd.restarting) { if (!this.wd.restarting) this.wd.step = 0; return; }
+    const lastApply = this.controller.lastApply || 0;
+    const ping = this.pings[name];
+    // Healthy: a report since the effect was (re)applied, and a recent one.
+    if (ping && ping.at >= lastApply && now - ping.at < wd.staleMs) { this.wd.step = 0; return; }
+    const silentFor = now - Math.max(lastApply, ping ? ping.at : 0, this.wd.okAt);
+    if (silentFor < wd.staleMs) return;
+    if (this.wd.step === 0) {
+      this.log.warn(`Watchdog: "${name}" stopped reporting from SignalRGB; re-applying it`);
+      this.wd.step = 1;
+      this.wd.okAt = now;
+      this.controller.reapply(name);
+    } else if (this.wd.step === 1 && now - this.wd.restartAt > 600000) {
+      this.log.warn(`Watchdog: "${name}" still silent; restarting SignalRGB`);
+      this.wd.restarting = true;
+      this.wd.restartAt = now;
+      this.restartSignalRGB()
+        .then(() => { this.client.effectCache = null; this.controller.reapply(); this.log.info('Watchdog: SignalRGB restarted'); })
+        .catch((err) => this.log.error(`Watchdog: SignalRGB restart failed: ${err.message}`))
+        .finally(() => { this.wd.restarting = false; this.wd.step = 0; this.wd.okAt = Date.now(); });
+    }
   }
 
   // Warns when a SignalRGB device sits outside the zones (e.g. after devices were moved).
@@ -442,6 +477,7 @@ class BridgeApp {
       ambSmoothMs: this.cfg.zones.ambience.smoothMs,
       ceilingEnabled: this.cfg.zones.ceiling.enabled,
       ceilingColor: this.cfg.zones.ceiling.color,
+      watchdogEnabled: this.cfg.watchdog.enabled,
     };
   }
 
@@ -454,6 +490,7 @@ class BridgeApp {
     const raw = fs.existsSync(this.files.config) ? readJson(this.files.config) : {};
     for (const [k, v] of Object.entries(clean)) {
       if (k === 'beaconEnabled') raw.beacon = { ...(raw.beacon || {}), enabled: v };
+      else if (k === 'watchdogEnabled') raw.watchdog = { ...(raw.watchdog || {}), enabled: v };
       else if (k === 'zonesEnabled') raw.zones = { ...(raw.zones || {}), enabled: v };
       else if (AMB_KEYS[k]) {
         raw.zones = { ...(raw.zones || {}) };

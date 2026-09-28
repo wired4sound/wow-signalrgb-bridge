@@ -114,6 +114,11 @@
           <select name="baseline"></select>
           <small><i>Follow SignalRGB</i> uses whatever you last picked in SignalRGB.</small>
         </label>
+        <label class="field check">
+          <input type="checkbox" name="watchdogEnabled">
+          <span>Fix frozen lights automatically</span>
+          <small>SignalRGB's effect engine can stall (for example after the PC sits idle), freezing the lights. When a bridge effect stops reporting for 15s the bridge re-applies it, then restarts SignalRGB if needed (at most every 10 minutes).</small>
+        </label>
         <label class="field">
           <span>Minimum time between effect switches (ms)</span>
           <input type="number" name="minApplyIntervalMs" min="0" max="2000" step="10">

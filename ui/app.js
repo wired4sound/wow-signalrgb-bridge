@@ -409,6 +409,7 @@
     form.beaconEnabled.checked = s.beaconEnabled;
     form.zonesEnabled.checked = s.zonesEnabled;
     form.ceilingEnabled.checked = s.ceilingEnabled;
+    form.watchdogEnabled.checked = s.watchdogEnabled;
     form.ceilingColor.value = s.ceilingColor;
     AMB_FIELDS.forEach(function (k) { form[k].value = s[k]; ambLabel(k); });
     form.minApplyIntervalMs.value = s.minApplyIntervalMs;
@@ -443,6 +444,7 @@
       beaconEnabled: form.beaconEnabled.checked,
       zonesEnabled: form.zonesEnabled.checked,
       ceilingEnabled: form.ceilingEnabled.checked,
+      watchdogEnabled: form.watchdogEnabled.checked,
       ceilingColor: form.ceilingColor.value,
       ambGain: Number(form.ambGain.value),
       ambSaturation: Number(form.ambSaturation.value),

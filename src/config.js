@@ -26,7 +26,10 @@ const DEFAULTS = {
   },
 };
 
-const NESTED = ['signalrgb', 'beacon', 'ui', 'zones'];
+// Re-apply a bridge effect that stopped reporting from SignalRGB, then restart SignalRGB.
+DEFAULTS.watchdog = { enabled: true, staleMs: 15000 };
+
+const NESTED = ['signalrgb', 'beacon', 'ui', 'zones', 'watchdog'];
 
 const WOW_ROOTS = [
   'C:\\Program Files (x86)\\World of Warcraft',
