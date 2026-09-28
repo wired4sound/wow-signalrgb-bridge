@@ -19,7 +19,7 @@ const requests = [];
 const raf = [];
 const ctx = {
   set fillStyle(v) { fills.push(v); }, get fillStyle() { return fills[fills.length - 1]; },
-  fillRect() {}, save() {}, restore() {}, beginPath() {}, rect() {}, clip() {},
+  fillRect() {}, save() {}, restore() {}, beginPath() {}, rect() {}, clip() {}, setTransform() {},
 };
 const win = { requestAnimationFrame: (f) => raf.push(f) };
 class FakeImage {

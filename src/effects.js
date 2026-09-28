@@ -247,16 +247,34 @@ ${PATTERNS_SRC}
     for (var i = 0; i < 4; i++) for (var j = 0; j < 3; j++) amb[i][j] += (ambIn[i][j] - amb[i][j]) * k;
     drawAmbience(0, 0, 320, 200);
     for (var z = 0; z < DATA.zones.length; z++) {
-      var r = DATA.zones[z].rect, idx = zoneIdx[z];
-      if (idx === 15) { ctx.fillStyle = DATA.room; ctx.fillRect(r[0], r[1], r[2], r[3]); continue; }
-      if (!idx || !DATA.designs[idx - 1]) continue;
+      var zone = DATA.zones[z], idx = zoneIdx[z];
+      // The zone's main rect plus any extra parts (a part with axis "y" is drawn rotated,
+      // so a horizontal bar runs along a vertically placed device).
+      var areas = [{ rect: zone.rect }].concat(zone.parts || []);
+      if (idx === 15) {
+        ctx.fillStyle = DATA.room;
+        areas.forEach(function (a) { ctx.fillRect(a.rect[0], a.rect[1], a.rect[2], a.rect[3]); });
+        continue;
+      }
+      if (!idx || !DATA.designs[idx - 1]) {
+        areas.slice(1).forEach(function (a) { drawAmbience(a.rect[0], a.rect[1], a.rect[2], a.rect[3]); });
+        continue;
+      }
       if (zoneState[z].idx !== idx) zoneState[z] = { idx: idx, state: {}, t0: t };
       var def = DATA.designs[idx - 1], st = zoneState[z].state;
       if (def.source) st.level = levels[def.source] || 0;
-      ctx.save();
-      ctx.beginPath(); ctx.rect(r[0], r[1], r[2], r[3]); ctx.clip();
-      WowPatterns.render(ctx, 320, 200, t - zoneState[z].t0, def, st);
-      ctx.restore();
+      for (var a = 0; a < areas.length; a++) {
+        var r = areas[a].rect;
+        ctx.save();
+        ctx.beginPath(); ctx.rect(r[0], r[1], r[2], r[3]); ctx.clip();
+        if (areas[a].axis === "y") {
+          // pattern x (0..320) -> part height; pattern y (0..200) -> part width.
+          if (areas[a].reverse) ctx.setTransform(0, -r[3] / 320, r[2] / 200, 0, r[0], r[1] + r[3]);
+          else ctx.setTransform(0, r[3] / 320, r[2] / 200, 0, r[0], r[1]);
+        }
+        WowPatterns.render(ctx, 320, 200, t - zoneState[z].t0, def, st);
+        ctx.restore();
+      }
     }
     frames++;
     window.requestAnimationFrame(update);

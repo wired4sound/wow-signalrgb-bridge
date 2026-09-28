@@ -33,6 +33,16 @@
       "floor": 10,
       "brightness": 100
     },
+    "health": {
+      "name": "WoW Health",
+      "pattern": "gauge",
+      "colors": [
+        "#1fd11f",
+        "#021402"
+      ],
+      "brightness": 100,
+      "source": "health"
+    },
     "mana": {
       "name": "WoW Mana",
       "pattern": "gauge",

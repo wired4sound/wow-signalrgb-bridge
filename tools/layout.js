@@ -7,7 +7,7 @@
 
 const path = require('path');
 const { readLayout } = require('../src/srgb-layout');
-const { checkLayout, DEFAULT_RECTS, ZONE_LABELS } = require('../src/zones');
+const { checkLayout, DEFAULT_RECTS, DEFAULT_PARTS, ZONE_LABELS } = require('../src/zones');
 const { loadConfig } = require('../src/config');
 
 const cfg = loadConfig(path.join(__dirname, '..', 'config.json'));
@@ -17,7 +17,8 @@ if (!devices.length) {
   console.log('No SignalRGB layout found in the registry.');
   process.exit(1);
 }
-const checked = checkLayout(devices, rects);
+const parts = { ...DEFAULT_PARTS, ...(cfg.zones.parts || {}) };
+const checked = checkLayout(devices, rects, parts);
 let bad = 0;
 devices.forEach((d, i) => {
   const c = checked[i];

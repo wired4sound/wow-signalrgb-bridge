@@ -119,6 +119,10 @@ test('zones: layout check flags devices outside their zones', () => {
   assert.deepStrictEqual(r.map((c) => c.zone), ['ceiling', 'radiator', 'rear', 'ceiling', 'bottom']);
   assert.deepStrictEqual(r.map((c) => !!c.problem), [false, false, true, true, false]);
   assert.deepStrictEqual(r[4].box.map(Math.round), [306, 108, 6, 71]); // rotated 90 around its center
+  // A zone part wins over the plain rects.
+  const withPart = zones.checkLayout([dev('Front', 273, 140, 71, 6, { rotation: 90 })], zones.DEFAULT_RECTS,
+    { strip: [{ rect: [304, 106, 9, 75], axis: 'y', reverse: true }] });
+  assert.strictEqual(withPart[0].zone, 'strip');
 });
 
 test('zones: ambience grading, easing, and word encoding', () => {

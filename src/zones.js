@@ -30,20 +30,29 @@ const DEFAULT_RECTS = {
   strip: [0, 185, 320, 15],
 };
 
+// Extra, possibly rotated, areas that belong to a zone (zones.parts in config.json):
+//   { "strip": [{ "rect": [x, y, w, h], "axis": "y", "reverse": true }] }
+// A part with axis 'y' is drawn rotated: the pattern's left-to-right runs along the part's
+// height (reverse: from the bottom up). Useful when a device sits vertically in the layout
+// but is a horizontal bar in real life and you'd rather not move it in SignalRGB.
+const DEFAULT_PARTS = {};
+
 function inRect([x, y, w, h], px, py) {
   return px >= x && px < x + w && py >= y && py < y + h;
 }
 
 // Which zone each SignalRGB device's center falls in (rotation-aware for 90/270).
 // Hue lights must land in the ceiling; others anywhere but the ceiling.
-function checkLayout(devices, rects = DEFAULT_RECTS) {
+function checkLayout(devices, rects = DEFAULT_RECTS, parts = DEFAULT_PARTS) {
   return devices.map((d) => {
     const quarter = Math.abs(d.rotation % 180) === 90;
     const cx = d.x + d.w / 2;
     const cy = d.y + d.h / 2;
     const w = quarter ? d.h : d.w;
     const h = quarter ? d.w : d.h;
-    const zone = ZONE_NAMES.find((z) => inRect(rects[z], cx, cy)) || null;
+    // Parts are drawn on top of the plain rects, so they win.
+    const zone = ZONE_NAMES.find((z) => (parts[z] || []).some((p) => inRect(p.rect, cx, cy)))
+      || ZONE_NAMES.find((z) => inRect(rects[z], cx, cy)) || null;
     let problem = null;
     if (!zone) problem = 'outside every zone';
     else if (d.hue && zone !== 'ceiling') problem = 'Hue light outside the ceiling band';
@@ -144,5 +153,5 @@ class Ambience {
 }
 
 module.exports = {
-  ZONE_NAMES, ZONE_LABELS, GROUPS, DEFAULT_RECTS, ROOM_LIGHT, expandZones, resolveZones, packZones, grade, Ambience, checkLayout,
+  ZONE_NAMES, ZONE_LABELS, GROUPS, DEFAULT_RECTS, DEFAULT_PARTS, ROOM_LIGHT, expandZones, resolveZones, packZones, grade, Ambience, checkLayout,
 };

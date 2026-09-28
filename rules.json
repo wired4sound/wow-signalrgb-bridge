@@ -72,7 +72,9 @@
       "event": "PLAYER_LOW_MANA_START",
       "effect": "WoW Low Mana",
       "zones": [
-        "pc"
+        "rear",
+        "back",
+        "bottom"
       ],
       "priority": 70,
       "clearOn": [

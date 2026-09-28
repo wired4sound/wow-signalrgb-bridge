@@ -148,7 +148,8 @@ class BridgeApp {
 
   zoneList() {
     const rects = { ...zonesLib.DEFAULT_RECTS, ...(this.cfg.zones.rects || {}) };
-    return zonesLib.ZONE_NAMES.map((name) => ({ name, rect: rects[name] }));
+    const parts = { ...zonesLib.DEFAULT_PARTS, ...(this.cfg.zones.parts || {}) };
+    return zonesLib.ZONE_NAMES.map((name) => ({ name, rect: rects[name], parts: parts[name] || [] }));
   }
 
   designIndex() {
@@ -249,8 +250,10 @@ class BridgeApp {
   checkLayout() {
     if (process.platform !== 'win32' || !this.cfg.zones.enabled) return;
     try {
-      const rects = Object.fromEntries(this.zoneList().map((z) => [z.name, z.rect]));
-      const problems = zonesLib.checkLayout(require('./srgb-layout').readLayout(), rects).filter((c) => c.problem);
+      const list = this.zoneList();
+      const rects = Object.fromEntries(list.map((z) => [z.name, z.rect]));
+      const parts = Object.fromEntries(list.map((z) => [z.name, z.parts]));
+      const problems = zonesLib.checkLayout(require('./srgb-layout').readLayout(), rects, parts).filter((c) => c.problem);
       for (const p of problems) this.log.warn(`Layout: ${p.name} is ${p.problem}. Run "node tools/layout.js" and adjust the zones.`);
     } catch (err) {
       this.log.warn(`Could not read the SignalRGB layout: ${err.message}`);
@@ -411,6 +414,13 @@ class BridgeApp {
     return { effect, ms: dur };
   }
 
+  // Test hook: fake a gauge value for a moment (tools/gauge-demo.js sweeps it).
+  fakeGauge(source, value, ms = 1000) {
+    if (!['mana', 'health'].includes(source)) throw new Error('source must be mana or health');
+    this.gaugeOverride = { source, value: num(value, 0, 1), until: Date.now() + Math.round(num(ms, 50, 10000)) };
+    return { ok: true };
+  }
+
   stopPreview() {
     this.controller.clear(PREVIEW_KEY, 'stopped');
   }
@@ -433,6 +443,8 @@ class BridgeApp {
 
   // Live values for gauge effects (see src/effects.js). null = none right now.
   gaugeValue(source) {
+    const o = this.gaugeOverride;
+    if (o && o.source === source && Date.now() < o.until) return o.value;
     if (source === 'mana') return this.beacon.mana();
     if (source === 'health') return this.beacon.health();
     return null;
