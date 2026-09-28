@@ -58,7 +58,8 @@
       "event": "PLAYER_LOW_HEALTH_START",
       "effect": "WoW Low Health",
       "zones": [
-        "back"
+        "rightTop",
+        "rightBottom"
       ],
       "priority": 80,
       "clearOn": [
@@ -73,8 +74,10 @@
       "effect": "WoW Low Mana",
       "zones": [
         "rear",
-        "back",
-        "bottom"
+        "rightTop",
+        "rightBottom",
+        "floorLeft",
+        "floorRight"
       ],
       "priority": 70,
       "clearOn": [
@@ -89,7 +92,8 @@
       "effect": "WoW Health Full",
       "zones": [
         "radiator",
-        "back"
+        "rightTop",
+        "rightBottom"
       ],
       "priority": 72,
       "durationMs": 1000

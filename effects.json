@@ -44,6 +44,16 @@
       "brightness": 100,
       "source": "health"
     },
+    "healthFull": {
+      "name": "WoW Health Full",
+      "pattern": "flash",
+      "colors": [
+        "#5dff5d",
+        "#000000"
+      ],
+      "speedMs": 500,
+      "brightness": 100
+    },
     "mana": {
       "name": "WoW Mana",
       "pattern": "gauge",
@@ -62,6 +72,16 @@
       ],
       "speedMs": 700,
       "floor": 5,
+      "brightness": 100
+    },
+    "manaFull": {
+      "name": "WoW Mana Full",
+      "pattern": "flash",
+      "colors": [
+        "#4aa0ff",
+        "#000000"
+      ],
+      "speedMs": 500,
       "brightness": 100
     },
     "bossFight": {

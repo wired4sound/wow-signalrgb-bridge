@@ -4,30 +4,43 @@
 // with no rule shows the game's ambience (the colors of the WoW world, sampled by the
 // beacon reader).
 //
-// Default rectangles match the author's SignalRGB layout (read with src/srgb-layout.js;
-// `node tools/layout.js` prints yours and checks every device lands in a zone):
-//   Hue ceiling lights y 10-17 | radiator fans bar y 31-41 | single fan on the left x 0-47, y 58-91 |
-//   fans on the right x 249-300, y 48-125 | floor fans x 212-302, y 137-177 | strip y 188-197.
+// Default rectangles match the author's SignalRGB layout "Main" (read with src/srgb-layout.js;
+// `node tools/layout.js` prints yours and checks every device lands in a zone). The ceiling
+// lights sit in a top band; below it the case is drawn in proportion as seen through its
+// glass (x 88-232, y 32-198): 3 top exhaust fans, the AIO's radiator fans (one set, wired
+// in parallel by the AIO), a rear fan on the left, 2 fans stacked on the right, 2 floor
+// fans, and the strip along the bottom edge (its hidden front part runs up the right edge).
 // Override with zones.rects in config.json. Zone keys are stable (rules.json uses them);
 // labels are display names.
 
-const ZONE_NAMES = ['ceiling', 'radiator', 'rear', 'back', 'bottom', 'strip'];
+const ZONE_NAMES = [
+  'ceiling', 'topLeft', 'topMiddle', 'topRight', 'radiator', 'rear',
+  'rightTop', 'rightBottom', 'floorLeft', 'floorRight', 'strip',
+];
 const ZONE_LABELS = {
-  ceiling: 'Ceiling (Hue cans)', radiator: 'Liquid cooling fans', rear: 'Back fan (left)',
-  back: 'Right fans', bottom: 'Bottom fans', strip: 'Side strip',
+  ceiling: 'Ceiling (Hue cans)', topLeft: 'Top left fan', topMiddle: 'Top middle fan', topRight: 'Top right fan',
+  radiator: 'Liquid cooling fans', rear: 'Back fan', rightTop: 'Right top fan', rightBottom: 'Right bottom fan',
+  floorLeft: 'Floor left fan', floorRight: 'Floor right fan', strip: 'Side strip',
 };
 const GROUPS = {
   all: ZONE_NAMES,
   pc: ZONE_NAMES.filter((z) => z !== 'ceiling'),
 };
+// Zones from before the fans were split up (kept so old rules still load).
+const LEGACY = { back: ['rightTop', 'rightBottom'], bottom: ['floorLeft', 'floorRight'] };
 // [x, y, w, h] in canvas units. Generous, non-overlapping, and covering each device.
 const DEFAULT_RECTS = {
-  ceiling: [0, 0, 320, 28],
-  radiator: [0, 28, 320, 18],
-  rear: [0, 46, 130, 139],
-  back: [240, 46, 80, 79],
-  bottom: [130, 125, 190, 60],
-  strip: [0, 185, 320, 15],
+  ceiling: [0, 0, 320, 30],
+  topLeft: [96, 30, 41, 15],
+  topMiddle: [137, 30, 41, 15],
+  topRight: [178, 30, 54, 15],
+  radiator: [104, 45, 128, 20],
+  rear: [80, 45, 24, 60],
+  rightTop: [180, 66, 52, 38],
+  rightBottom: [180, 104, 52, 36],
+  floorLeft: [140, 145, 42, 35],
+  floorRight: [182, 145, 50, 35],
+  strip: [80, 182, 160, 18],
 };
 
 // Extra, possibly rotated, areas that belong to a zone (zones.parts in config.json):
@@ -35,7 +48,8 @@ const DEFAULT_RECTS = {
 // A part with axis 'y' is drawn rotated: the pattern's left-to-right runs along the part's
 // height (reverse: from the bottom up). Useful when a device sits vertically in the layout
 // but is a horizontal bar in real life and you'd rather not move it in SignalRGB.
-const DEFAULT_PARTS = {};
+// The strip's hidden front part stands vertically at the case's right edge.
+const DEFAULT_PARTS = { strip: [{ rect: [232, 55, 10, 135] }] };
 
 function inRect([x, y, w, h], px, py) {
   return px >= x && px < x + w && py >= y && py < y + h;
@@ -52,14 +66,64 @@ function checkLayout(devices, rects = DEFAULT_RECTS, parts = DEFAULT_PARTS) {
     const h = quarter ? d.w : d.h;
     // Parts are drawn on top of the plain rects, so they win.
     const zone = ZONE_NAMES.find((z) => (parts[z] || []).some((p) => inRect(p.rect, cx, cy)))
-      || ZONE_NAMES.find((z) => inRect(rects[z], cx, cy)) || null;
+      || ZONE_NAMES.find((z) => rects[z] && inRect(rects[z], cx, cy)) || null;
     let problem = null;
-    if (!zone) problem = 'outside every zone';
+    // Unnamed "Default Strip - N" placeholders on empty motherboard headers light nothing.
+    const placeholder = /^Default Strip - \d+$/.test(d.name || '');
+    if (!zone && placeholder) problem = null;
+    else if (!zone) problem = 'outside every zone';
     else if (d.hue && zone !== 'ceiling') problem = 'Hue light outside the ceiling band';
     else if (!d.hue && zone === 'ceiling') problem = 'PC device inside the ceiling band';
     return { name: d.name, channel: d.channel, zone, box: [d.x + d.w / 2 - w / 2, d.y + d.h / 2 - h / 2, w, h], problem };
   });
 }
+// SignalRGB device names (as set in its layout, case and spaces ignored) -> zone. A device
+// marked part adds an extra area to its zone instead of setting the zone's main rect.
+const DEVICE_ZONES = {
+  topleft: 'topLeft', topmiddle: 'topMiddle', topright: 'topRight',
+  coolingfans: 'radiator', liquidcoolingfans: 'radiator', radiator: 'radiator', aio: 'radiator',
+  rearfan: 'rear', backfan: 'rear',
+  righttop: 'rightTop', rightbottom: 'rightBottom',
+  floorleft: 'floorLeft', floorright: 'floorRight',
+  sidestrip: 'strip', strip: 'strip', frontstrip: ['strip', 'part'],
+};
+
+// Zone rects and parts from where the devices actually sit in the SignalRGB layout, so the
+// zones follow the layout when it's edited there. Boxes are rotation-aware and clipped to
+// the canvas. The ceiling is a full-width band down to the Hue lights (never over the PC).
+// Zones with no matching device get an empty rect. Returns null when nothing matched.
+function zonesFromLayout(devices) {
+  const rects = {};
+  const parts = {};
+  const clip = ([x, y, w, h]) => {
+    const x0 = Math.max(0, Math.floor(x)), y0 = Math.max(0, Math.floor(y));
+    const x1 = Math.min(320, Math.ceil(x + w)), y1 = Math.min(200, Math.ceil(y + h));
+    return x1 > x0 && y1 > y0 ? [x0, y0, x1 - x0, y1 - y0] : null;
+  };
+  let hueBottom = 0;
+  let pcTop = 200;
+  for (const c of checkLayout(devices, {}, {})) {
+    const d = devices.find((x) => x.name === c.name && x.channel === c.channel) || {};
+    if (d.hue) { hueBottom = Math.max(hueBottom, c.box[1] + c.box[3]); continue; }
+    const m = DEVICE_ZONES[String(c.name || '').toLowerCase().replace(/[^a-z]/g, '')];
+    if (!m) continue;
+    const [zone, part] = Array.isArray(m) ? m : [m];
+    const box = clip(c.box);
+    if (!box) continue;
+    pcTop = Math.min(pcTop, box[1]);
+    if (part || rects[zone]) {
+      // A vertical part runs a bar (gauge) along its length.
+      (parts[zone] = parts[zone] || []).push(box[3] > box[2] ? { rect: box, axis: 'y' } : { rect: box });
+    } else {
+      rects[zone] = box;
+    }
+  }
+  if (!Object.keys(rects).length && !Object.keys(parts).length) return null;
+  if (hueBottom) rects.ceiling = [0, 0, 320, Math.max(1, Math.min(Math.ceil(hueBottom) + 2, pcTop))];
+  for (const z of ZONE_NAMES) if (!rects[z]) rects[z] = [0, 0, 0, 0];
+  return { rects, parts };
+}
+
 // Design index per zone, 5 bits: 0 = ambience (game world), 1..29 = designs,
 // 30 = normal color (PC while not playing), 31 = room light (ceiling left out).
 const BITS = 5;
@@ -72,6 +136,7 @@ function expandZones(list) {
   const out = new Set();
   for (const z of list || ['all']) {
     if (GROUPS[z]) GROUPS[z].forEach((n) => out.add(n));
+    else if (LEGACY[z]) LEGACY[z].forEach((n) => out.add(n));
     else if (ZONE_NAMES.includes(z)) out.add(z);
     else throw new Error(`unknown zone "${z}" (use ${[...Object.keys(GROUPS), ...ZONE_NAMES].join(', ')})`);
   }
@@ -160,5 +225,5 @@ class Ambience {
 }
 
 module.exports = {
-  ZONE_NAMES, ZONE_LABELS, GROUPS, DEFAULT_RECTS, DEFAULT_PARTS, ROOM_LIGHT, NORMAL, MAX_DESIGNS, BITS, PER_WORD, expandZones, resolveZones, packZones, grade, Ambience, checkLayout,
+  ZONE_NAMES, ZONE_LABELS, GROUPS, LEGACY, DEFAULT_RECTS, DEFAULT_PARTS, ROOM_LIGHT, NORMAL, MAX_DESIGNS, BITS, PER_WORD, DEVICE_ZONES, zonesFromLayout, expandZones, resolveZones, packZones, grade, Ambience, checkLayout,
 };

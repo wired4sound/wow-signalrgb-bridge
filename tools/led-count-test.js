@@ -11,13 +11,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { readLayout } = require('../src/srgb-layout');
 const { defaultEffectsDir } = require('../src/effects');
 
 const BASE = 'http://127.0.0.1:17700';
 const H = { 'Content-Type': 'application/json', 'X-Bridge': '1' };
 const BLOCKS = ['#ff0000', '#ff7a00', '#ffe000', '#00d000', '#00ffff', '#0030ff', '#9000ff', '#ff40a0'];
-const REG = 'HKCU\\Software\\WhirlwindFX\\SignalRgb';
 
 async function call(method, p, body) {
   const res = await fetch(BASE + p, { method, headers: H, body: body ? JSON.stringify(body) : undefined });
@@ -26,43 +25,13 @@ async function call(method, p, body) {
   return j;
 }
 
-// Parses `reg query /s` output into { keyPath: { name: value } }.
-function regTree(key) {
-  const out = {};
-  let cur = null;
-  for (const line of execFileSync('reg', ['query', key, '/s'], { encoding: 'utf8' }).split(/\r?\n/)) {
-    if (line.startsWith('HKEY_')) { cur = line.trim(); out[cur] = {}; continue; }
-    const m = /^\s+(.+?)\s{4}REG_\w+\s{4}(.*)$/.exec(line);
-    if (m && cur) out[cur][m[1]] = m[2];
-  }
-  return out;
-}
-
+// Every placed component (named or not), from src/srgb-layout.js.
 function devices() {
-  const tree = regTree(`${REG}\\lighting\\endpoint`);
-  const comps = regTree(`${REG}\\devices`);
-  // Component definitions (LED count, grid) per component id, from the device channel lists.
-  const byId = {};
-  for (const vals of Object.values(comps)) {
-    for (const v of Object.values(vals)) {
-      if (!v.startsWith('[')) continue;
-      try { for (const c of JSON.parse(v)) byId[c.ComponentId] = c; } catch { /* not JSON */ }
-    }
-  }
-  const list = [];
-  for (const [k, vals] of Object.entries(tree)) {
-    if (!vals.alias) continue;
-    const id = k.split('\\').pop();
-    const pos = tree[`${k}\\position`] || {};
-    const comp = byId[id];
-    if (!comp) continue;
-    const scale = vals.scale ? JSON.parse(vals.scale) : { x: 1, y: 1 };
-    list.push({
-      alias: vals.alias, leds: comp.LedCount, w: comp.Width, h: comp.Height,
-      x: Number(pos.x), y: Number(pos.y), sx: scale.x, sy: scale.y, rotation: Number(vals.rotation || 0),
-    });
-  }
-  return list;
+  return readLayout().filter((d) => !d.hue).map((d) => ({
+    alias: `${d.name}${d.channel ? ` (${d.channel})` : ''}`,
+    leds: d.leds, w: d.grid[0], h: d.grid[1], x: d.x, y: d.y,
+    sx: d.w / d.grid[0], sy: d.h / d.grid[1], rotation: d.rotation,
+  }));
 }
 
 // Per-LED colors (index 0 = first LED) for each mode.

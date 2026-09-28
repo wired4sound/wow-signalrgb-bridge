@@ -57,7 +57,9 @@ Set-ItemProperty -Path "$ep\position" -Name x -Value $X -Type DWord
 Set-ItemProperty -Path "$ep\position" -Name y -Value $Y -Type DWord
 
 # Named layout blob (keeps brightness, clears flips; rotation does the reversing).
-$old = Read-Json ([byte[]]$lk.GetValue($Id))
+$blob = $lk.GetValue($Id)
+if ($null -eq $blob) { Write-Output "updated $Id (endpoint only; not in layout $Layout)"; exit 0 }
+$old = Read-Json ([byte[]]$blob)
 $o = $old | ConvertFrom-Json
 $json = ('{{"brightness":{0},"flipped":false,"flippedV":false,"rotation":{1},"scale":{2},"x":{3},"y":{4}}}' -f $o.brightness, $Rotation, $scale, $X, $Y)
 Set-ItemProperty -Path $layoutKey -Name $Id -Value (Build-Blob $json) -Type Binary

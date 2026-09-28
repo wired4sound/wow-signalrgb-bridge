@@ -118,20 +118,24 @@ test('zones: each zone shows its own highest-priority rule', () => {
   const idx = { 'WoW Death': 1, 'WoW Mana': 4, 'WoW Low Health': 3 };
   const ruleZones = { Death: zones.expandZones(['all']), Mana: zones.expandZones(['pc']), Low: zones.expandZones(['pc']) };
   const e = (key, effect, priority, seq) => ({ key, effect, priority, seq });
+  const pcAll = (v) => Array(zones.ZONE_NAMES.length - 1).fill(v);
   let r = zones.resolveZones([e('Mana', 'WoW Mana', 25, 1)], ruleZones, idx);
-  assert.deepStrictEqual(r.map((z) => z.index), [0, 4, 4, 4, 4, 4]); // ceiling = ambience
+  assert.deepStrictEqual(r.map((z) => z.index), [0, ...pcAll(4)]); // ceiling = ambience
   r = zones.resolveZones([e('Mana', 'WoW Mana', 25, 1), e('Low', 'WoW Low Health', 80, 2)], ruleZones, idx);
-  assert.deepStrictEqual(r.map((z) => z.index), [0, 3, 3, 3, 3, 3]);
+  assert.deepStrictEqual(r.map((z) => z.index), [0, ...pcAll(3)]);
   r = zones.resolveZones([e('Mana', 'WoW Mana', 25, 1), e('Death', 'WoW Death', 100, 3)], ruleZones, idx);
-  assert.deepStrictEqual(r.map((z) => z.index), [1, 1, 1, 1, 1, 1]);
+  assert.deepStrictEqual(r.map((z) => z.index), [1, ...pcAll(1)]);
   // Stock SignalRGB effects can't be drawn by the compositor: skipped.
   r = zones.resolveZones([e('Mana', 'Rainbow', 25, 1)], ruleZones, idx);
-  assert.deepStrictEqual(r.map((z) => z.index), [0, 0, 0, 0, 0, 0]);
+  assert.deepStrictEqual(r.map((z) => z.index), [0, ...pcAll(0)]);
   assert.deepStrictEqual(zones.packZones([1, 2, 3, 4, 5, 6]), [1 | (2 << 5), 3 | (4 << 5), 5 | (6 << 5)]);
   assert.deepStrictEqual(zones.packZones([31, 30, 0, 29, 0, 0]), [31 | (30 << 5), 0 | (29 << 5), 0]);
   // Idle zones: game world in game, normal color outside it; excluded zones: room light.
   r = zones.resolveZones([], ruleZones, idx, ['ceiling'], zones.NORMAL);
-  assert.deepStrictEqual(r.map((z) => z.index), [31, 30, 30, 30, 30, 30]);
+  assert.deepStrictEqual(r.map((z) => z.index), [31, ...pcAll(30)]);
+  // Old fan-set zones still load, as the individual fans.
+  assert.deepStrictEqual(zones.expandZones(['back']), ['rightTop', 'rightBottom']);
+  assert.deepStrictEqual(zones.expandZones(['bottom', 'strip']), ['floorLeft', 'floorRight', 'strip']);
   assert.throws(() => zones.expandZones(['roof']), /unknown zone/);
 });
 
@@ -140,14 +144,17 @@ test('zones: layout check flags devices outside their zones', () => {
   const dev = (name, x, y, w, h, extra = {}) => ({ name, x, y, w, h, rotation: 0, hue: false, ...extra });
   const r = zones.checkLayout([
     dev('Hue', 5, 11, 13, 5, { hue: true }),
-    dev('Radiator', 1, 31, 311, 10),
+    dev('Cooling Fans', 100, 50, 118, 12),
     dev('Stray hue', 100, 150, 10, 5, { hue: true }),
     dev('PC in ceiling', 100, 5, 10, 5),
-    dev('Front', 273, 140, 71, 6, { rotation: 90 }),
+    dev('Front Strip', 171.5, 120.5, 126, 5, { rotation: 90 }), // vertical at the case's right edge
+    dev('Default Strip - 60', 24, 98, 60, 1), // placeholder on an empty header: ignored
+    dev('Top Left', 101, 32, 34, 10),
+    dev('Floor Right', 183, 152, 38, 21),
   ]);
-  assert.deepStrictEqual(r.map((c) => c.zone), ['ceiling', 'radiator', 'rear', 'ceiling', 'bottom']);
-  assert.deepStrictEqual(r.map((c) => !!c.problem), [false, false, true, true, false]);
-  assert.deepStrictEqual(r[4].box.map(Math.round), [306, 108, 6, 71]); // rotated 90 around its center
+  assert.deepStrictEqual(r.map((c) => c.zone), ['ceiling', 'radiator', null, 'ceiling', 'strip', null, 'topLeft', 'floorRight']);
+  assert.deepStrictEqual(r.map((c) => !!c.problem), [false, false, true, true, false, false, false, false]);
+  assert.deepStrictEqual(r[4].box.map(Math.round), [232, 60, 5, 126]); // rotated 90 around its center
   // A zone part wins over the plain rects.
   const withPart = zones.checkLayout([dev('Front', 273, 140, 71, 6, { rotation: 90 })], zones.DEFAULT_RECTS,
     { strip: [{ rect: [304, 106, 9, 75], axis: 'y', reverse: true }] });
@@ -576,9 +583,14 @@ test('api: zones compositor while in game, zone words and ambience over the imag
     // Ceiling (zone 0) shows ambience (0); the radiator (zone 1) shows the health gauge;
     // the other PC zones show the mana gauge.
     const healthIdx = idx.indexOf('health') + 1;
-    assert.strictEqual(await word('z0'), 0 | (healthIdx << 5));
-    assert.strictEqual(await word('z1'), manaIdx | (manaIdx << 5));
-    assert.strictEqual(await word('z2'), manaIdx | (manaIdx << 5));
+    const zonesLib = require('../src/zones');
+    const shown = [];
+    for (let w = 0; w * 2 < zonesLib.ZONE_NAMES.length; w++) {
+      const v = await word(`z${w}`);
+      shown.push(v & 31, (v >> 5) & 31);
+    }
+    const expected = zonesLib.ZONE_NAMES.map((z) => (z === 'ceiling' ? 0 : z === 'radiator' ? healthIdx : manaIdx));
+    assert.deepStrictEqual(shown.slice(0, zonesLib.ZONE_NAMES.length), expected);
     const hi = await word('a0h'), lo = await word('a0l');
     assert.deepStrictEqual([hi >> 4, ((hi & 15) << 4) | (lo >> 8), lo & 255], [0x10, 0x20, 0x30]);
     assert.strictEqual(await word('bogus'), null);
@@ -607,7 +619,7 @@ test('api: zones compositor while in game, zone words and ambience over the imag
 
     const s = (await t.call('GET', '/api/state')).body;
     assert.strictEqual(s.zones.enabled, true);
-    assert.strictEqual(s.zones.list.length, 6);
+    assert.strictEqual(s.zones.list.length, require('../src/zones').ZONE_NAMES.length);
 
     // Ceiling left out: it shows the room light (index 15) even for "all" rules.
     t.reader.emit('reading', ok({ hp: 0, dead: true, hasMana: true, mana: 0.5 }));
@@ -626,7 +638,7 @@ test('watchdog: silent effect is re-applied, then SignalRGB is restarted', async
   const t = await startApp();
   try {
     t.app.cfg.watchdog = { enabled: true, staleMs: 1000 };
-    await t.call('POST', '/api/preview', { effect: 'WoW Death', ms: 60000 });
+    t.app.controller.activate({ key: 'Test', effect: 'WoW Death', priority: 500 });
     await sleep(40);
     const t0 = Date.now();
     const applies = () => t.srgb.state.applied.filter((n) => n === 'WoW Death').length;
@@ -652,7 +664,12 @@ test('watchdog: silent effect is re-applied, then SignalRGB is restarted', async
     await sleep(40);
     assert.strictEqual(t.restarts(), 1);
     // Not a bridge effect: the watchdog stays out of it.
-    await t.call('POST', '/api/preview', { effect: 'Rainbow', ms: 60000 });
+    t.app.controller.activate({ key: 'Test', effect: 'Rainbow', priority: 500 });
+    await sleep(40);
+    t.app.watchdog(Date.now() + 60000);
+    assert.strictEqual(t.app.wd.step, 0);
+    // A preview (test tools borrow effect files that never ping): left alone too.
+    await t.call('POST', '/api/preview', { effect: 'WoW Death', ms: 60000 });
     await sleep(40);
     t.app.watchdog(Date.now() + 60000);
     assert.strictEqual(t.app.wd.step, 0);
@@ -794,4 +811,24 @@ $b.Save('${amb.replace(/'/g, "''")}')`], { windowsHide: true });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('zones follow the SignalRGB layout by device name', () => {
+  const zonesLib = require('../src/zones');
+  const dev = (name, x, y, w, h, extra = {}) => ({ name, channel: name, x, y, w, h, rotation: 0, ...extra });
+  const z = zonesLib.zonesFromLayout([
+    dev('19', 5, 11, 13, 5, { hue: true }),
+    dev('Side Strip', 0, 188, 320, 7),
+    dev('Front Strip', 250, 115, 126, 5, { rotation: 90 }), // stands vertically at x ~313
+    dev('Cooling Fans', 105, 50, 565, 12), // stretched past the canvas edge
+    dev('Rear Fan', 88, 57, 14, 36),
+    dev('Default Strip - 60', 24, 98, 60, 1),
+  ]);
+  assert.deepStrictEqual(z.rects.strip, [0, 188, 320, 7]);
+  assert.deepStrictEqual(z.parts.strip, [{ rect: [310, 54, 6, 127], axis: 'y' }]);
+  assert.deepStrictEqual(z.rects.radiator, [105, 50, 215, 12]);
+  assert.deepStrictEqual(z.rects.rear, [88, 57, 14, 36]);
+  assert.deepStrictEqual(z.rects.ceiling, [0, 0, 320, 18]);
+  assert.deepStrictEqual(z.rects.topLeft, [0, 0, 0, 0]);
+  assert.strictEqual(zonesLib.zonesFromLayout([dev('Default Strip - 60', 24, 98, 60, 1)]), null);
 });

@@ -190,7 +190,7 @@
     var out = [];
     list.forEach(function (z) {
       var add = z === 'all' ? PARTS.map(function (p) { return p[0]; })
-        : z === 'pc' ? PARTS.slice(1).map(function (p) { return p[0]; }) : [z];
+        : z === 'pc' ? PARTS.slice(1).map(function (p) { return p[0]; }) : LEGACY[z] || [z];
       add.forEach(function (a) { if (out.indexOf(a) < 0) out.push(a); });
     });
     return PARTS.map(function (p) { return p[0]; }).filter(function (p) { return out.indexOf(p) >= 0; });
@@ -276,16 +276,20 @@
 
   // ---------- rules ----------
 
-  // Light groups, in display order (keys are the bridge's zone names).
+  // Lights, in display order (keys are the bridge's zone names).
   var PARTS = [
-    ['ceiling', 'Ceiling'], ['radiator', 'Liquid cooling fans'], ['rear', 'Back fan'],
-    ['back', 'Right fans'], ['bottom', 'Bottom fans'], ['strip', 'Side strip'],
+    ['ceiling', 'Ceiling'],
+    ['topLeft', 'Top left'], ['topMiddle', 'Top middle'], ['topRight', 'Top right'],
+    ['radiator', 'Liquid cooling fans'], ['rear', 'Back fan'],
+    ['rightTop', 'Right top'], ['rightBottom', 'Right bottom'],
+    ['floorLeft', 'Floor left'], ['floorRight', 'Floor right'],
+    ['strip', 'Side strip'],
   ];
+  // Old fan-set zones, from before the fans were split up.
+  var LEGACY = { back: ['rightTop', 'rightBottom'], bottom: ['floorLeft', 'floorRight'] };
 
-  var WHERE = [
-    ['all', 'Everywhere'], ['pc', 'PC only'], ['ceiling', 'Ceiling only'],
-    ['radiator', 'Liquid cooling fans'], ['rear', 'Back fan (left)'], ['back', 'Right fans'], ['bottom', 'Bottom fans'], ['strip', 'Side strip'],
-  ];
+  var WHERE = [['all', 'Everywhere'], ['pc', 'PC only'], ['ceiling', 'Ceiling only']]
+    .concat(PARTS.slice(1).map(function (p) { return [p[0], p[1] + ' only']; }));
 
   var EVENT_TEXT = {
     PLAYER_DIED: 'You die (until you release or revive)',

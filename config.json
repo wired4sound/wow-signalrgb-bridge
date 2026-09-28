@@ -18,11 +18,10 @@
     "gaugeReverse": {
       "strip": true
     },
-    "gaugeRange": {
-      "strip": [
-        0,
-        0.85
-      ]
-    }
+    "ceiling": {
+      "enabled": false,
+      "color": "#ffffff"
+    },
+    "fromLayout": false
   }
 }

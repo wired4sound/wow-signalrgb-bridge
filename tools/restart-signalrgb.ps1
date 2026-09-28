@@ -8,6 +8,12 @@ $launcher = Get-ChildItem "$env:LOCALAPPDATA\VortxEngine\app-*\SignalRgbLauncher
 if (-not $launcher) { throw 'SignalRgbLauncher.exe not found under %LOCALAPPDATA%\VortxEngine' }
 
 $old = Get-Process -Name SignalRgb -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id
+# Ask it to close first: SignalRGB writes layout edits to the registry only when it exits
+# properly, so a hard kill loses them. Force only if it's still running after 15s.
+foreach ($p in Get-Process -Name SignalRgb -ErrorAction SilentlyContinue) { $null = $p.CloseMainWindow() }
+if ($old) { & taskkill.exe /IM SignalRgb.exe 2>$null | Out-Null }
+$wait = (Get-Date).AddSeconds(15)
+while ((Get-Date) -lt $wait -and (Get-Process -Name SignalRgb -ErrorAction SilentlyContinue)) { Start-Sleep -Milliseconds 500 }
 Get-Process -Name SignalRgb, SignalRgbLauncher -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Seconds 3
 Start-Process $launcher.FullName

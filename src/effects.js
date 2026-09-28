@@ -195,25 +195,38 @@ ${PATTERNS_SRC}
   DATA.designs.forEach(function (d) { if (d.source && sources.indexOf(d.source) < 0) sources.push(d.source); });
   sources.forEach(function (s) { levels[s] = 0; });
 
+  // Image requests go through a queue, one at a time. Many parallel requests keep the
+  // page "loading" in SignalRGB's engine, which then never runs the drawing loop.
+  var queue = [], busy = false;
+  function load(url, cb) { queue.push([url, cb]); next(); }
+  function next() {
+    if (busy || !queue.length) return;
+    busy = true;
+    var job = queue.shift(), img = new Image(), done = false;
+    function finish(ok) { if (done) return; done = true; busy = false; if (ok) job[1](img); next(); }
+    img.onload = function () { finish(true); };
+    img.onerror = function () { finish(false); };
+    setTimeout(function () { finish(false); }, 1000);
+    img.src = job[0] + "&t=" + Date.now();
+  }
   function word(key, cb) {
-    var img = new Image();
-    img.onload = function () { if (img.naturalHeight === 1) cb(img.naturalWidth - 1); };
-    img.src = BASE + "/api/w.bmp?k=" + key + "&t=" + Date.now();
+    load(BASE + "/api/w.bmp?k=" + key, function (img) { if (img.naturalHeight === 1) cb(img.naturalWidth - 1); });
   }
   function setAmb(i) {
     var hi = ambHi[i], lo = ambLo[i];
     ambIn[i] = [hi >> 4, ((hi & 15) << 4) | (lo >> 8), lo & 255];
   }
   function poll() {
+    if (queue.length) return; // previous round still loading: skip, don't pile up
     tick++;
     // 2 zones per word, 5 bits each.
     for (var p = 0; p * 2 < zoneIdx.length; p++) (function (p) {
       word("z" + p, function (v) { for (var j = 0; j < 2 && p * 2 + j < zoneIdx.length; j++) zoneIdx[p * 2 + j] = (v >> (5 * j)) & 31; });
     })(p);
     sources.forEach(function (s) {
-      var img = new Image();
-      img.onload = function () { levels[s] = img.naturalHeight === 2 ? 0 : (img.naturalWidth - 1) / 1000; };
-      img.src = BASE + "/api/gauge.bmp?source=" + encodeURIComponent(s) + "&t=" + Date.now();
+      load(BASE + "/api/gauge.bmp?source=" + encodeURIComponent(s), function (img) {
+        levels[s] = img.naturalHeight === 2 ? 0 : (img.naturalWidth - 1) / 1000;
+      });
     });
     if (tick % 2 === 0) for (var i = 0; i < 4; i++) (function (i) {
       word("a" + i + "h", function (v) { ambHi[i] = v; setAmb(i); });
@@ -229,9 +242,9 @@ ${PATTERNS_SRC}
       + "&error=" + encodeURIComponent(lastError) + "&t=" + Date.now();
   }
   window.onerror = function (msg, src, line) { lastError = String(msg) + " @" + line; ping(); };
-  setInterval(poll, 100);
+  // Start polling only once the page has loaded.
+  setTimeout(function () { setInterval(poll, 100); poll(); }, 500);
   setInterval(ping, 3000);
-  poll();
   setTimeout(ping, 300);
 
   function drawAmbience(x, y, w, h) {
@@ -246,7 +259,7 @@ ${PATTERNS_SRC}
     ctx.restore();
   }
 
-  function update() {
+  function draw() {
     var now = Date.now(), t = now - start, dt = lastT ? now - lastT : 16;
     lastT = now;
     var k = Math.min(1, dt / 150); // ease between 5 Hz ambience samples
@@ -279,12 +292,18 @@ ${PATTERNS_SRC}
           // pattern x (0..320) -> part height; pattern y (0..200) -> part width.
           if (areas[a].reverse) ctx.setTransform(0, -r[3] / 320, r[2] / 200, 0, r[0], r[1] + r[3]);
           else ctx.setTransform(0, r[3] / 320, r[2] / 200, 0, r[0], r[1]);
+        } else if (def.source) {
+          // A live gauge spans its own area, not the slice of the canvas under it.
+          ctx.setTransform(r[2] / 320, 0, 0, r[3] / 200, r[0], r[1]);
         }
         WowPatterns.render(ctx, 320, 200, t - zoneState[z].t0, def, st);
         ctx.restore();
       }
     }
-    frames++;
+  }
+  // One bad frame must never freeze the lights: catch, report (via the ping), keep going.
+  function update() {
+    try { draw(); frames++; } catch (e) { lastError = String((e && e.message) || e) + (e && e.line ? " @" + e.line : ""); }
     window.requestAnimationFrame(update);
   }
   window.requestAnimationFrame(update);

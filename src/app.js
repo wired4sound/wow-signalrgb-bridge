@@ -167,9 +167,12 @@ class BridgeApp {
     return '#000000';
   }
 
+  // Zone areas: from the live SignalRGB layout by device name (zones.fromLayout, default on),
+  // else the defaults; zones.rects / zones.parts in config.json override either.
   zoneList() {
-    const rects = { ...zonesLib.DEFAULT_RECTS, ...(this.cfg.zones.rects || {}) };
-    const parts = { ...zonesLib.DEFAULT_PARTS, ...(this.cfg.zones.parts || {}) };
+    const auto = this.cfg.zones.fromLayout !== false && this.layoutZones;
+    const rects = { ...(auto ? auto.rects : zonesLib.DEFAULT_RECTS), ...(this.cfg.zones.rects || {}) };
+    const parts = { ...(auto ? auto.parts : zonesLib.DEFAULT_PARTS), ...(this.cfg.zones.parts || {}) };
     const ranges = this.cfg.zones.gaugeRange || {};
     const reverse = this.cfg.zones.gaugeReverse || {};
     return zonesLib.ZONE_NAMES.map((name) => {
@@ -222,6 +225,7 @@ class BridgeApp {
     this.log.info(`Loaded ${this.rules.length} active rules`);
     // A dry run must not touch SignalRGB, including its Effects folder: the files carry
     // this instance's port, and would break the effect pings of a live bridge.
+    if (!this.opts.dryRun) this.readLayoutZones();
     const inst = this.opts.dryRun ? { added: [] } : this.installEffects();
     if (inst.added.length) {
       this.log.warn(`New effects written (${inst.added.join(', ')}). SignalRGB must be restarted to list them: use "Install effects" in the settings page.`);
@@ -244,7 +248,9 @@ class BridgeApp {
     let ticks = 0;
     this.tickTimer = setInterval(() => {
       this.feedBeacon(null);
-      if (ticks++ % 5 === 0) this.checkSignalRGB();
+      if (ticks % 5 === 0) this.checkSignalRGB();
+      if (ticks % 30 === 29 && !this.opts.dryRun) this.refreshLayoutZones();
+      ticks++;
       this.watchdog();
     }, 1000);
   }
@@ -256,7 +262,9 @@ class BridgeApp {
   watchdog(now = Date.now()) {
     const wd = this.cfg.watchdog;
     if (!wd.enabled || this.opts.dryRun || this.stopping) return;
-    const name = this.controller.status().showing;
+    const { showing: name, showingKey } = this.controller.status();
+    // Previews are short and test tools borrow an effect file with a page that never pings.
+    if (showingKey === PREVIEW_KEY) { this.wd.step = 0; this.wd.okAt = now; return; }
     const ours = name === effectsLib.COMPOSITOR_NAME || Object.values(this.effects).some((e) => e.name === name);
     if (!ours || !name || this.wd.restarting) { if (!this.wd.restarting) this.wd.step = 0; return; }
     const lastApply = this.controller.lastApply || 0;
@@ -279,6 +287,26 @@ class BridgeApp {
         .catch((err) => this.log.error(`Watchdog: SignalRGB restart failed: ${err.message}`))
         .finally(() => { this.wd.restarting = false; this.wd.step = 0; this.wd.okAt = Date.now(); });
     }
+  }
+
+  // Reads the SignalRGB layout (registry) into zone areas. Returns true when they changed.
+  readLayoutZones() {
+    if (process.platform !== 'win32' || this.cfg.zones.fromLayout === false) return false;
+    let next = null;
+    try { next = zonesLib.zonesFromLayout(require('./srgb-layout').readLayout()); } catch { return false; }
+    if (!next) return false;
+    const changed = JSON.stringify(next) !== JSON.stringify(this.layoutZones || null);
+    this.layoutZones = next;
+    return changed;
+  }
+
+  // SignalRGB writes layout edits to the registry some time after they're made; follow them.
+  refreshLayoutZones() {
+    if (!this.cfg.zones.enabled || !this.readLayoutZones()) return;
+    this.log.info('SignalRGB layout changed: zones updated');
+    this.installEffects();
+    this.controller.reapply(effectsLib.COMPOSITOR_NAME);
+    this.checkLayout();
   }
 
   // Warns when a SignalRGB device sits outside the zones (e.g. after devices were moved).
