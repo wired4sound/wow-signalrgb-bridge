@@ -479,6 +479,7 @@
     sel.value = s.baseline || '';
     settingsDirty = false;
     $('button[type=submit]', form).disabled = true;
+    renderCeilingQuick();
   }
 
   form.addEventListener('input', function (e) {
@@ -523,6 +524,26 @@
       $('#settings-status').textContent = err.message;
       $('#settings-status').className = 'status err';
     });
+  });
+
+  // One-click ceiling switch: follow the game, or daylight (the room light color).
+  function renderCeilingQuick() {
+    var b = $('#ceiling-quick');
+    if (!data.settings) return;
+    var on = data.settings.ceilingEnabled;
+    b.textContent = on ? 'Ceiling: follows the game' : 'Ceiling: daylight';
+    b.classList.toggle('daylight', !on);
+  }
+  $('#ceiling-quick').addEventListener('click', function () {
+    if (!data.settings) return;
+    var b = $('#ceiling-quick');
+    b.disabled = true;
+    api('PUT', '/api/settings', { ceilingEnabled: !data.settings.ceilingEnabled }).then(function (s) {
+      data.settings = s;
+      if (!settingsDirty) renderSettings();
+      renderCeilingQuick();
+      toast(s.ceilingEnabled ? 'Ceiling follows the game again' : 'Ceiling on daylight white');
+    }).catch(function (e) { toast(e.message, true); }).then(function () { b.disabled = false; });
   });
 
   $('#install').addEventListener('click', function () {
@@ -594,7 +615,7 @@
           : z.name === 'ceiling' && !design ? 'linear-gradient(90deg,' + ambAvg.join(',') + ')' : swatch;
         zbox.appendChild(el('div', { class: 'zone', title: z.label }, [
           dot, el('b', { text: z.label.replace(' (Hue cans)', '') }),
-          el('span', { text: z.room ? 'room light' : z.key ? z.key : 'game world' }),
+          el('span', { text: z.room ? 'daylight' : z.normal ? 'normal color' : z.key ? z.key : 'game world' }),
         ]));
       });
     }

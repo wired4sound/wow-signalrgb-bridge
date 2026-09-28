@@ -37,7 +37,7 @@ node tools/anonymize-log.js <file> [--me <name>]    # fake names/GUIDs before sh
 node tools/lua-check.js            # rough block/paren balance check of the addon Lua
 powershell -ExecutionPolicy Bypass -File tools\beacon-reader.ps1 [-ImagePath shot.png]
 powershell -ExecutionPolicy Bypass -File tools\restart-signalrgb.ps1
-npm test                           # 37 tests incl. a real (anonymized) Forever log fixture and the reader on generated PNGs
+npm test                           # 44 tests (use test/fixtures/rules.json, not the live rules.json) incl. a real (anonymized) Forever log fixture and the reader on generated PNGs
 ```
 
 No npm dependencies. Node 18+ (global `fetch`).
@@ -81,7 +81,8 @@ While the beacon is live and `zones.enabled`, the controller's `override` keeps 
 - Zones (`src/zones.js`, 320x200 canvas): `ceiling`, `radiator`, `rear`, `back`, `bottom`, `strip`; groups `all`, `pc`. Keys are stable (rules use them); labels are display names. `DEFAULT_RECTS` match the author's layout: room lights in a top band, the PC below (radiator bar, a fan on the left, fans on the right, floor fans, a strip along the bottom). Override with `zones.rects` in config.json.
 - `src/srgb-layout.js` reads the layout from SignalRGB's registry settings: `HKCU\Software\WhirlwindFX\SignalRgb\lighting\endpoint\<id>` (alias, scale, rotation) + `\position` (x, y = top-left of the LED grid, canvas units), and `devices\<device>` ("Channel N" = JSON component list: ComponentId, LedCount, Width, Height). `node tools/layout.js` prints it and flags devices outside their zone; the bridge logs the same warnings at startup.
 - Ambience: the reader averages 4 vertical slices of the game view (8% to 68% of the height) and adds `amb` to every reading; `Ambience` grades it (gain, saturation, floor) and eases it. Slices map left to right onto the canvas (4 x 80px).
-- Channel into the effect: `GET /api/w.bmp?k=` returns a BMP whose width-1 is a 12-bit word: `z0`/`z1` = 3 zones x 4-bit design index (0 = ambience, 1..14 = `Object.values(effects)` order, 15 = room light), `a<i>h`/`a<i>l` = ambience color i (`R<<4|G>>4`, `(G&15)<<8|B`). `GET /api/gauge.bmp?source=mana`: width-1 = mana in 0.1% steps, height 2 = none. The effect polls zones and mana every 100ms, ambience every 200ms, and pings `z=` and `amb=` back so `/api/state` shows what it really draws.
+- Ceiling left out (`zones.ceiling.enabled` false, one-click "Ceiling: daylight" button): the ceiling shows `zones.ceiling.color` (default `#ffffff`, daylight at 100%), and the compositor also stays on **outside the game**, where idle PC zones show the normal color (`zones.normalColor`, or read from SignalRGB's Solid Color settings via `readSolidColor()`: QColor blob in `HKCU\...\SignalRgb\effects\Solid Color.html\color`, shown at 50% when Breathing is on at speed 0). Handing the cans back to the Hue app needs the Hue device disabled in SignalRGB; SignalRGB's API has no device endpoints.
+- Channel into the effect: `GET /api/w.bmp?k=` returns a BMP whose width-1 is a 12-bit word: `z0`/`z1`/`z2` = 2 zones x 5-bit design index (0 = ambience, 1..29 = `Object.values(effects)` order, 30 = normal color, 31 = room light), `a<i>h`/`a<i>l` = ambience color i (`R<<4|G>>4`, `(G&15)<<8|B`). `GET /api/gauge.bmp?source=mana`: width-1 = mana in 0.1% steps, height 2 = none. The effect polls zones and mana every 100ms, ambience every 200ms, and pings `z=` and `amb=` back so `/api/state` shows what it really draws.
 
 ## Verified facts
 

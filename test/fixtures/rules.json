@@ -1,0 +1,210 @@
+{
+  "rules": [
+    {
+      "name": "Death",
+      "event": "PLAYER_DIED",
+      "effect": "WoW Death",
+      "zones": [
+        "all"
+      ],
+      "priority": 100,
+      "durationMs": 600000,
+      "clearOn": [
+        {
+          "event": [
+            "PLAYER_ALIVE",
+            "PLAYER_GHOST"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ghost",
+      "event": "PLAYER_GHOST",
+      "effect": "WoW Ghost",
+      "zones": [
+        "all"
+      ],
+      "priority": 100,
+      "durationMs": 1800000,
+      "clearOn": [
+        {
+          "event": "PLAYER_ALIVE"
+        }
+      ]
+    },
+    {
+      "name": "Boss Victory",
+      "event": "ENCOUNTER_WIN",
+      "effect": "WoW Victory",
+      "zones": [
+        "all"
+      ],
+      "priority": 90,
+      "durationMs": 8000
+    },
+    {
+      "name": "Boss Wipe",
+      "event": "ENCOUNTER_WIPE",
+      "effect": "WoW Wipe",
+      "zones": [
+        "all"
+      ],
+      "priority": 90,
+      "durationMs": 5000
+    },
+    {
+      "name": "Low Health",
+      "event": "PLAYER_LOW_HEALTH_START",
+      "effect": "WoW Low Health",
+      "zones": [
+        "back"
+      ],
+      "priority": 80,
+      "clearOn": [
+        {
+          "event": "PLAYER_LOW_HEALTH_END"
+        }
+      ]
+    },
+    {
+      "name": "Low Mana",
+      "event": "PLAYER_LOW_MANA_START",
+      "effect": "WoW Low Mana",
+      "zones": [
+        "rear",
+        "back",
+        "bottom"
+      ],
+      "priority": 70,
+      "clearOn": [
+        {
+          "event": "PLAYER_LOW_MANA_END"
+        }
+      ]
+    },
+    {
+      "name": "Health Full",
+      "event": "PLAYER_HEALTH_FULL",
+      "effect": "WoW Health Full",
+      "zones": [
+        "radiator",
+        "back"
+      ],
+      "priority": 72,
+      "durationMs": 1000
+    },
+    {
+      "name": "Mana Full",
+      "event": "PLAYER_MANA_FULL",
+      "effect": "WoW Mana Full",
+      "zones": [
+        "strip"
+      ],
+      "priority": 72,
+      "durationMs": 1000
+    },
+    {
+      "name": "Bloodlust",
+      "event": "SPELL_AURA_APPLIED",
+      "spellName": [
+        "Bloodlust",
+        "Heroism",
+        "Time Warp",
+        "Primal Rage"
+      ],
+      "dest": "player",
+      "auraType": "BUFF",
+      "effect": "WoW Bloodlust",
+      "zones": [
+        "all"
+      ],
+      "priority": 60,
+      "durationMs": 40000,
+      "clearOn": [
+        {
+          "event": "SPELL_AURA_REMOVED",
+          "dest": "player"
+        }
+      ]
+    },
+    {
+      "name": "Crit Flash",
+      "enabled": false,
+      "event": [
+        "SPELL_DAMAGE",
+        "RANGE_DAMAGE",
+        "SWING_DAMAGE"
+      ],
+      "source": "player",
+      "critical": true,
+      "effect": "WoW Crit",
+      "zones": [
+        "pc"
+      ],
+      "priority": 30,
+      "durationMs": 300,
+      "cooldownMs": 1000
+    },
+    {
+      "name": "Health Gauge",
+      "event": "HEALTH_AVAILABLE",
+      "effect": "WoW Health",
+      "zones": [
+        "radiator"
+      ],
+      "priority": 26,
+      "clearOn": [
+        {
+          "event": "HEALTH_UNAVAILABLE"
+        }
+      ]
+    },
+    {
+      "name": "Mana Gauge",
+      "event": "MANA_AVAILABLE",
+      "effect": "WoW Mana",
+      "zones": [
+        "pc"
+      ],
+      "priority": 25,
+      "clearOn": [
+        {
+          "event": "MANA_UNAVAILABLE"
+        }
+      ]
+    },
+    {
+      "name": "Boss Fight",
+      "event": "ENCOUNTER_START",
+      "effect": "WoW Boss Fight",
+      "zones": [
+        "pc"
+      ],
+      "priority": 20,
+      "clearOn": [
+        {
+          "event": [
+            "ENCOUNTER_END",
+            "ZONE_CHANGE"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "In Combat",
+      "enabled": false,
+      "event": "PLAYER_COMBAT_START",
+      "effect": "WoW In Combat",
+      "zones": [
+        "pc"
+      ],
+      "priority": 10,
+      "clearOn": [
+        {
+          "event": "PLAYER_COMBAT_END"
+        }
+      ]
+    }
+  ]
+}

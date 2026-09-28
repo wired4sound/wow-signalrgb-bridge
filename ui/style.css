@@ -91,6 +91,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .now-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); min-width: 0; }
 .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
 .showing { font-size: 22px; font-weight: 600; }
+.showing-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+#ceiling-quick { font-size: 12.5px; padding: 5px 12px; border-radius: 999px; white-space: nowrap; }
+#ceiling-quick.daylight { background: #fff7e6; color: #3a2f16; border-color: #f0dca8; }
 .stack { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; min-height: 24px; }
 .stack .tag { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); }
 .stack .tag.top { background: var(--accent-soft); border-color: transparent; }

@@ -60,8 +60,13 @@ function checkLayout(devices, rects = DEFAULT_RECTS, parts = DEFAULT_PARTS) {
     return { name: d.name, channel: d.channel, zone, box: [d.x + d.w / 2 - w / 2, d.y + d.h / 2 - h / 2, w, h], problem };
   });
 }
-const BITS = 4; // design index bits per zone (0 = ambience, 1..14 = designs, 15 = room light)
-const ROOM_LIGHT = 15;
+// Design index per zone, 5 bits: 0 = ambience (game world), 1..29 = designs,
+// 30 = normal color (PC while not playing), 31 = room light (ceiling left out).
+const BITS = 5;
+const PER_WORD = 2; // zones per 12-bit channel word
+const NORMAL = 30;
+const ROOM_LIGHT = 31;
+const MAX_DESIGNS = 29;
 
 function expandZones(list) {
   const out = new Set();
@@ -77,21 +82,23 @@ function expandZones(list) {
 // -> expanded zone list. designIndex: effect name -> index (1-based) or undefined.
 // Returns per-zone { index, key } in ZONE_NAMES order.
 // excluded: zones the bridge leaves out; they show the fixed room light instead.
-function resolveZones(entries, ruleZones, designIndex, excluded = []) {
+// idleIndex: what a zone with no rule shows (0 = game world ambience, NORMAL = normal color).
+function resolveZones(entries, ruleZones, designIndex, excluded = [], idleIndex = 0) {
   const sorted = [...entries].sort((a, b) => b.priority - a.priority || b.seq - a.seq);
   return ZONE_NAMES.map((zone) => {
     if (excluded.includes(zone)) return { index: ROOM_LIGHT, key: null, effect: null, room: true };
     const e = sorted.find((x) => (ruleZones[x.key] || ZONE_NAMES).includes(zone) && designIndex[x.effect]);
-    return e ? { index: designIndex[e.effect], key: e.key, effect: e.effect } : { index: 0, key: null, effect: null };
+    if (e) return { index: designIndex[e.effect], key: e.key, effect: e.effect };
+    return { index: idleIndex, key: null, effect: null, normal: idleIndex === NORMAL };
   });
 }
 
-// Packs zone indices into 12-bit words (3 zones each) for the image-size channel.
+// Packs zone indices into 12-bit words (2 zones x 5 bits each) for the image-size channel.
 function packZones(indices) {
   const words = [];
-  for (let i = 0; i < indices.length; i += 3) {
+  for (let i = 0; i < indices.length; i += PER_WORD) {
     let v = 0;
-    for (let j = 0; j < 3; j++) v |= ((indices[i + j] || 0) & 15) << (BITS * j);
+    for (let j = 0; j < PER_WORD; j++) v |= ((indices[i + j] || 0) & 31) << (BITS * j);
     words.push(v);
   }
   return words;
@@ -153,5 +160,5 @@ class Ambience {
 }
 
 module.exports = {
-  ZONE_NAMES, ZONE_LABELS, GROUPS, DEFAULT_RECTS, DEFAULT_PARTS, ROOM_LIGHT, expandZones, resolveZones, packZones, grade, Ambience, checkLayout,
+  ZONE_NAMES, ZONE_LABELS, GROUPS, DEFAULT_RECTS, DEFAULT_PARTS, ROOM_LIGHT, NORMAL, MAX_DESIGNS, BITS, PER_WORD, expandZones, resolveZones, packZones, grade, Ambience, checkLayout,
 };

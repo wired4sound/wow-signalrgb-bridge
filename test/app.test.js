@@ -127,7 +127,11 @@ test('zones: each zone shows its own highest-priority rule', () => {
   // Stock SignalRGB effects can't be drawn by the compositor: skipped.
   r = zones.resolveZones([e('Mana', 'Rainbow', 25, 1)], ruleZones, idx);
   assert.deepStrictEqual(r.map((z) => z.index), [0, 0, 0, 0, 0, 0]);
-  assert.deepStrictEqual(zones.packZones([1, 2, 3, 4, 5, 6]), [1 | (2 << 4) | (3 << 8), 4 | (5 << 4) | (6 << 8)]);
+  assert.deepStrictEqual(zones.packZones([1, 2, 3, 4, 5, 6]), [1 | (2 << 5), 3 | (4 << 5), 5 | (6 << 5)]);
+  assert.deepStrictEqual(zones.packZones([31, 30, 0, 29, 0, 0]), [31 | (30 << 5), 0 | (29 << 5), 0]);
+  // Idle zones: game world in game, normal color outside it; excluded zones: room light.
+  r = zones.resolveZones([], ruleZones, idx, ['ceiling'], zones.NORMAL);
+  assert.deepStrictEqual(r.map((z) => z.index), [31, 30, 30, 30, 30, 30]);
   assert.throws(() => zones.expandZones(['roof']), /unknown zone/);
 });
 
@@ -353,7 +357,8 @@ async function startApp({ dryRun = false, zones = false } = {}) {
     zones: { enabled: zones, ambience: { gain: 1, saturation: 1, floor: 0, smoothMs: 0 } },
     watchdog: { enabled: false },
   }));
-  fs.copyFileSync(path.join(__dirname, '..', 'rules.json'), path.join(dir, 'rules.json'));
+  // A fixed copy, so edits made in the settings page (which change rules.json) don't break tests.
+  fs.copyFileSync(path.join(__dirname, 'fixtures', 'rules.json'), path.join(dir, 'rules.json'));
   const reader = new FakeReader();
   let restarts = 0;
   const app = new BridgeApp({
@@ -571,8 +576,9 @@ test('api: zones compositor while in game, zone words and ambience over the imag
     // Ceiling (zone 0) shows ambience (0); the radiator (zone 1) shows the health gauge;
     // the other PC zones show the mana gauge.
     const healthIdx = idx.indexOf('health') + 1;
-    assert.strictEqual(await word('z0'), 0 | (healthIdx << 4) | (manaIdx << 8));
-    assert.strictEqual(await word('z1'), manaIdx | (manaIdx << 4) | (manaIdx << 8));
+    assert.strictEqual(await word('z0'), 0 | (healthIdx << 5));
+    assert.strictEqual(await word('z1'), manaIdx | (manaIdx << 5));
+    assert.strictEqual(await word('z2'), manaIdx | (manaIdx << 5));
     const hi = await word('a0h'), lo = await word('a0l');
     assert.deepStrictEqual([hi >> 4, ((hi & 15) << 4) | (lo >> 8), lo & 255], [0x10, 0x20, 0x30]);
     assert.strictEqual(await word('bogus'), null);
@@ -581,7 +587,7 @@ test('api: zones compositor while in game, zone words and ambience over the imag
     t.reader.emit('reading', ok({ hp: 0, dead: true, hasMana: true, mana: 0.5 }));
     await sleep(40);
     const deathIdx = idx.indexOf('death') + 1;
-    assert.strictEqual((await word('z0')) & 15, deathIdx);
+    assert.strictEqual((await word('z0')) & 31, deathIdx);
     assert.strictEqual(t.srgb.state.current, 'WoW Bridge', 'still one effect; zones do the switching');
 
     // Preview bypasses the compositor.
@@ -607,8 +613,8 @@ test('api: zones compositor while in game, zone words and ambience over the imag
     t.reader.emit('reading', ok({ hp: 0, dead: true, hasMana: true, mana: 0.5 }));
     await sleep(40);
     assert.strictEqual((await t.call('PUT', '/api/settings', { ceilingEnabled: false, ceilingColor: '#112233' })).status, 200);
-    assert.strictEqual((await word('z0')) & 15, 15);
-    assert.strictEqual(((await word('z0')) >> 4) & 15, deathIdx, 'PC still shows death');
+    assert.strictEqual((await word('z0')) & 31, 31);
+    assert.strictEqual(((await word('z0')) >> 5) & 31, deathIdx, 'PC still shows death');
     assert.match(fs.readFileSync(path.join(t.dir, 'Effects', 'WoW Bridge.html'), 'utf8'), /"room":"#112233"/);
     assert.strictEqual((await t.call('PUT', '/api/settings', { ceilingColor: 'red' })).status, 400);
   } finally {
@@ -666,6 +672,30 @@ test('whole-effect mode skips part-only gauges but keeps part-only alerts', asyn
     t.reader.emit('reading', ok({ hp: 0.1 }));
     await sleep(40);
     assert.strictEqual(t.srgb.state.current, 'WoW Low Health');
+  } finally {
+    await t.close();
+  }
+});
+
+test('ceiling on daylight: compositor keeps running outside the game with the normal color', async () => {
+  const t = await startApp({ zones: true });
+  try {
+    const cfgFile = path.join(t.dir, 'config.json');
+    const raw = JSON.parse(fs.readFileSync(cfgFile, 'utf8'));
+    raw.zones.normalColor = '#123456'; // fixed, so the test doesn't read this PC's SignalRGB settings
+    fs.writeFileSync(cfgFile, JSON.stringify(raw));
+    await t.call('PUT', '/api/settings', { ceilingEnabled: false });
+    await sleep(40);
+    assert.strictEqual(t.srgb.state.current, 'WoW Bridge', 'not in game, still drawing (ceiling on daylight)');
+    const html = fs.readFileSync(path.join(t.dir, 'Effects', 'WoW Bridge.html'), 'utf8');
+    assert.match(html, /"room":"#ffffff"/);
+    assert.match(html, /"normal":"#123456"/);
+    const z = (await t.call('GET', '/api/state')).body.zones.list;
+    assert.strictEqual(z[0].room, true);
+    assert.ok(z.slice(1).every((x) => x.normal), 'PC shows the normal color');
+    await t.call('PUT', '/api/settings', { ceilingEnabled: true });
+    await sleep(40);
+    assert.strictEqual(t.srgb.state.current, 'Solid Color', 'back to normal switching outside the game');
   } finally {
     await t.close();
   }

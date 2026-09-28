@@ -239,7 +239,7 @@ test('controller ignores a stale read right after restoring baseline', async () 
 test('real WoW Forever sample: boss kill and death fire in order', () => {
   const fs = require('fs');
   const path = require('path');
-  const rules = loadRules(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'rules.json'), 'utf8')));
+  const rules = loadRules(JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'rules.json'), 'utf8')));
   const calls = [];
   const ctl = {
     active: new Set(),

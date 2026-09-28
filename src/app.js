@@ -152,6 +152,21 @@ class BridgeApp {
     this.wd = { step: 0, okAt: 0, restartAt: 0, restarting: false };
   }
 
+  // The PC's color while not playing (compositor running with the ceiling left out):
+  // zones.normalColor if set, else what SignalRGB's Solid Color shows when that is the
+  // normal effect, else black.
+  normalColor() {
+    if (this.cfg.zones.normalColor) return this.cfg.zones.normalColor;
+    const base = this.controller?.baseline?.effect || this.cfg.baseline?.effect;
+    if (process.platform === 'win32' && (!base || base === 'Solid Color')) {
+      try {
+        const sc = require('./srgb-layout').readSolidColor();
+        if (sc) return sc.shown;
+      } catch { /* not readable */ }
+    }
+    return '#000000';
+  }
+
   zoneList() {
     const rects = { ...zonesLib.DEFAULT_RECTS, ...(this.cfg.zones.rects || {}) };
     const parts = { ...zonesLib.DEFAULT_PARTS, ...(this.cfg.zones.parts || {}) };
@@ -176,7 +191,10 @@ class BridgeApp {
   zoneState() {
     const ruleZones = Object.fromEntries(this.rules.map((r) => [r.name, r.zones]));
     const excluded = this.cfg.zones.ceiling.enabled ? [] : ['ceiling'];
-    return zonesLib.resolveZones([...this.controller.entries.values()], ruleZones, this.designIndex(), excluded);
+    // In game an idle zone shows the game world; outside the game (compositor kept on so
+    // the ceiling stays on its room light) it shows the normal color.
+    const idle = this.beacon.healthy ? 0 : zonesLib.NORMAL;
+    return zonesLib.resolveZones([...this.controller.entries.values()], ruleZones, this.designIndex(), excluded, idle);
   }
 
   // Zones run while the beacon is live (in game), unless the top rule uses an effect the
@@ -184,7 +202,10 @@ class BridgeApp {
   updateCompositor() {
     const top = this.controller.winner();
     const drawable = !top || top.priority >= 1000 || this.designIndex()[top.effect];
-    const on = this.cfg.zones.enabled && this.compositorListed && this.beacon.healthy && !!drawable;
+    // With the ceiling left out, the compositor also runs outside the game, so the ceiling
+    // keeps its room light and the PC shows the normal color.
+    const wanted = this.beacon.healthy || !this.cfg.zones.ceiling.enabled;
+    const on = this.cfg.zones.enabled && this.compositorListed && wanted && !!drawable;
     this.controller.setOverride(on ? effectsLib.COMPOSITOR_NAME : null);
   }
 
@@ -372,6 +393,7 @@ class BridgeApp {
         pingPort: this.cfg.ui.port,
         zones: this.cfg.zones.enabled ? this.zoneList() : null,
         roomLight: this.cfg.zones.ceiling.color,
+        normalColor: this.normalColor(),
       });
       if (r.written.length) this.log.info(`Effect files updated: ${r.written.join(', ')}`);
       return r;
@@ -580,11 +602,12 @@ class BridgeApp {
       const r = this.cfg.zones.gaugeRange.strip;
       if (!(r[1] > r[0] + 0.05)) throw new Error('the bar must end at least 5% after it starts');
     }
-    if (['ceilingColor', 'stripGaugeStart', 'stripGaugeEnd', 'stripGaugeReverse'].some((k) => k in clean)) {
+    if (['ceilingColor', 'ceilingEnabled', 'stripGaugeStart', 'stripGaugeEnd', 'stripGaugeReverse'].some((k) => k in clean)) {
       // The room light color and gauge calibration are baked into the compositor effect:
       // rewrite and reload it.
       this.installEffects();
       this.controller.reapply(effectsLib.COMPOSITOR_NAME);
+      this.updateCompositor(); // ceiling left out: the compositor also runs outside the game
     }
     if ('zonesEnabled' in clean && clean.zonesEnabled !== before.zones.enabled) {
       if (clean.zonesEnabled) this.installAndRestart().catch((err) => this.log.error(`Zones: ${err.message}`));

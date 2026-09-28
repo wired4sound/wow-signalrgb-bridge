@@ -22,7 +22,8 @@ const DEFAULTS = {
   zones: {
     enabled: true, rects: null,
     ambience: { gain: 2.5, saturation: 1.4, floor: 0.06, smoothMs: 600 },
-    ceiling: { enabled: true, color: '#ffc98a' },
+    ceiling: { enabled: true, color: '#ffffff' }, // #ffffff: daylight white at 100%
+    normalColor: null, // PC color while not playing with the ceiling left out; null = SignalRGB's Solid Color
   },
 };
 
