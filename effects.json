@@ -132,13 +132,15 @@
     },
     "combat": {
       "name": "WoW In Combat",
-      "pattern": "breathe",
+      "pattern": "mix",
       "colors": [
-        "#ff5a1f"
+        "#ff0000",
+        "#ff6a00"
       ],
-      "speedMs": 3000,
-      "floor": 35,
-      "brightness": 80
+      "speedMs": 2000,
+      "floor": 20,
+      "brightness": 100,
+      "drift": 30
     },
     "crit": {
       "name": "WoW Crit",

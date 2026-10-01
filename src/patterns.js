@@ -22,6 +22,8 @@
     // Every light shows one color that moves Full -> Middle -> Empty with the value
     // (e.g. health: green -> yellow -> red).
     gaugeColor: { label: 'Live color (full / middle / empty)', colors: 3, params: ['brightness'], live: true },
+    // The fill gauge, blinking with a heartbeat (e.g. the mana bar while mana is low).
+    gaugeBlink: { label: 'Live gauge, blinking', colors: 2, params: ['speedMs', 'floor', 'brightness'], live: true },
   };
 
   var PARAMS = {
@@ -172,6 +174,7 @@
       }
 
       case 'gauge':
+      case 'gaugeBlink':
       case 'gaugeFade':
       case 'gaugeColor': {
         var target = typeof state.level === 'number' ? Math.min(1, Math.max(0, state.level))
@@ -199,6 +202,7 @@
         var full = lvl >= 0.999, lo, hi;
         if (state.reverse) { lo = full ? 0 : r1 - lvl * (r1 - r0); hi = 1; }
         else { lo = 0; hi = full ? 1 : r0 + lvl * (r1 - r0); }
+        if (c.pattern === 'gaugeBlink') B *= c.floor + (1 - c.floor) * Math.pow(Math.sin(phase * Math.PI), 2);
         stripes(ctx, w, h, function (x) {
           var from = x, to = x + 1 / STRIPES;
           var cover = Math.max(0, Math.min(to, hi) - Math.max(from, lo)) * STRIPES;

@@ -92,6 +92,9 @@ function loadRules(json) {
       return {
         name: r.name,
         zones,
+        // Zones named directly (not through a group like "all"): these may light a zone
+        // the bridge otherwise leaves out (the ceiling on daylight).
+        namedZones: (arr(r.zones) || []).filter((z) => z === 'ceiling'),
         effect: r.effect,
         preset: r.preset || null,
         priority: r.priority ?? 50,
@@ -105,10 +108,11 @@ function loadRules(json) {
 }
 
 class RuleEngine {
-  constructor(rules, controller, { log } = {}) {
+  constructor(rules, controller, { log, onFire } = {}) {
     this.rules = rules;
     this.controller = controller;
     this.log = log;
+    this.onFire = onFire; // (rule, ev) after a rule fires, e.g. for Hue ceiling alerts
   }
 
   handle(ev) {
@@ -133,6 +137,7 @@ class RuleEngine {
         durationMs: rule.durationMs,
         reason: ev.spellName || ev.encounterName || ev.event,
       });
+      this.onFire?.(rule, ev);
     }
   }
 }

@@ -30,7 +30,12 @@ const DEFAULTS = {
 // Re-apply a bridge effect that stopped reporting from SignalRGB, then restart SignalRGB.
 DEFAULTS.watchdog = { enabled: true, staleMs: 15000 };
 
-const NESTED = ['signalrgb', 'beacon', 'ui', 'zones', 'watchdog'];
+// Ceiling alerts through the Hue Bridge directly (src/hue.js), for Hue lights left out of
+// SignalRGB. Active once paired (hue.local.json). Rules whose zones name "ceiling" flash
+// these lights (ids or names), then restore them.
+DEFAULTS.hue = { enabled: true, lights: [] };
+
+const NESTED = ['signalrgb', 'beacon', 'ui', 'zones', 'watchdog', 'hue'];
 
 const WOW_ROOTS = [
   'C:\\Program Files (x86)\\World of Warcraft',

@@ -832,3 +832,45 @@ test('zones follow the SignalRGB layout by device name', () => {
   assert.deepStrictEqual(z.rects.topLeft, [0, 0, 0, 0]);
   assert.strictEqual(zonesLib.zonesFromLayout([dev('Default Strip - 60', 24, 98, 60, 1)]), null);
 });
+
+test('a rule naming the ceiling lights it even on daylight; "all" rules do not', () => {
+  const zonesLib = require('../src/zones');
+  const idx = { 'WoW Death': 1, 'WoW Mana Full': 8 };
+  const ruleZones = { Death: zonesLib.expandZones(['all']), 'Low Mana Ceiling': ['ceiling'] };
+  const named = { Death: [], 'Low Mana Ceiling': ['ceiling'] };
+  const ceiling = zonesLib.ZONE_NAMES.indexOf('ceiling');
+  const death = [{ key: 'Death', effect: 'WoW Death', priority: 100, seq: 1 }];
+  assert.strictEqual(zonesLib.resolveZones(death, ruleZones, idx, ['ceiling'], 0, named)[ceiling].index, zonesLib.ROOM_LIGHT);
+  const flash = [...death, { key: 'Low Mana Ceiling', effect: 'WoW Mana Full', priority: 72, seq: 2 }];
+  const z = zonesLib.resolveZones(flash, ruleZones, idx, ['ceiling'], 0, named);
+  assert.strictEqual(z[ceiling].index, 8);
+  assert.strictEqual(z[zonesLib.ZONE_NAMES.indexOf('strip')].index, 1); // Death still wins elsewhere
+});
+
+test('Hue ceiling alert: flashes the named lights, then restores each one', async () => {
+  const hueLib = require('../src/hue');
+  const puts = [];
+  const lights = {
+    1: { name: 'Hue Office NW', state: { on: true, bri: 254, colormode: 'ct', ct: 156, xy: [0.31, 0.33] } },
+    2: { name: 'Hue Office SW', state: { on: false, bri: 100, colormode: 'xy', xy: [0.5, 0.4] } },
+    3: { name: 'Porch', state: { on: true, bri: 10, colormode: 'xy', xy: [0.2, 0.2] } },
+  };
+  const requestFn = async (ip, method, p, body) => {
+    if (method === 'GET') return lights;
+    puts.push([p, body]);
+    return [{ success: {} }];
+  };
+  const hue = new hueLib.HueAlerts({ ip: 'x', key: 'k', lights: ['hue office nw', 'Hue Office SW'], requestFn });
+  const busy = hue.flash({ color: '#ff0000', times: 2, onMs: 5, gapMs: 5 });
+  assert.strictEqual(await hue.flash({ color: '#00ff00' }), false, 'second alert ignored while busy');
+  assert.strictEqual(await busy, true);
+  assert.deepStrictEqual([...new Set(puts.map(([p]) => p))], ['/api/k/lights/1/state', '/api/k/lights/2/state']);
+  assert.strictEqual(puts.length, 8); // 2 lights x (flash, restore) x 2
+  const last = Object.fromEntries(puts.slice(-2).map(([p, b]) => [p.split('/')[4], b]));
+  assert.deepStrictEqual(last['1'], { on: true, bri: 254, ct: 156, transitiontime: 0 });
+  assert.deepStrictEqual(last['2'], { on: false, transitiontime: 0 });
+  assert.ok(puts[0][1].xy[0] > 0.6, 'red xy');
+  // Rule -> flash shape.
+  assert.deepStrictEqual(hueLib.alertFor({ durationMs: 1000 }, { pattern: 'flash', speedMs: 500, colors: ['#4aa0ff'] }).times, 2);
+  assert.deepStrictEqual(hueLib.alertFor({ durationMs: 2000 }, { pattern: 'solid', colors: ['#ff0000'] }), { color: '#ff0000', times: 1, onMs: 2000 });
+});

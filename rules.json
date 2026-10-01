@@ -19,6 +19,16 @@
       ]
     },
     {
+      "name": "Death Ceiling",
+      "event": "PLAYER_DIED",
+      "effect": "WoW Death",
+      "zones": [
+        "ceiling"
+      ],
+      "priority": 101,
+      "durationMs": 2000
+    },
+    {
       "name": "Ghost",
       "event": "PLAYER_GHOST",
       "effect": "WoW Ghost",
@@ -42,6 +52,17 @@
       ],
       "priority": 90,
       "durationMs": 8000
+    },
+    {
+      "name": "Boss Kill Ceiling",
+      "event": "ENCOUNTER_WIN",
+      "effect": "WoW Victory",
+      "zones": [
+        "ceiling"
+      ],
+      "priority": 91,
+      "durationMs": 1500,
+      "cooldownMs": 10000
     },
     {
       "name": "Boss Wipe",
@@ -69,11 +90,20 @@
       ]
     },
     {
+      "name": "Low Health Ceiling",
+      "event": "PLAYER_LOW_HEALTH_START",
+      "effect": "WoW Low Health Flash",
+      "zones": [
+        "ceiling"
+      ],
+      "priority": 82,
+      "durationMs": 1000
+    },
+    {
       "name": "Low Mana",
       "event": "PLAYER_LOW_MANA_START",
       "effect": "WoW Low Mana",
       "zones": [
-        "rear",
         "rightTop",
         "rightBottom",
         "floorLeft",
@@ -85,6 +115,30 @@
           "event": "PLAYER_LOW_MANA_END"
         }
       ]
+    },
+    {
+      "name": "Low Mana Bar",
+      "event": "PLAYER_LOW_MANA_START",
+      "effect": "WoW Mana Low Bar",
+      "zones": [
+        "strip"
+      ],
+      "priority": 70,
+      "clearOn": [
+        {
+          "event": "PLAYER_LOW_MANA_END"
+        }
+      ]
+    },
+    {
+      "name": "Low Mana Ceiling",
+      "event": "PLAYER_LOW_MANA_START",
+      "effect": "WoW Mana Full",
+      "zones": [
+        "ceiling"
+      ],
+      "priority": 72,
+      "durationMs": 1000
     },
     {
       "name": "Health Full",
@@ -170,7 +224,7 @@
       "event": "MANA_AVAILABLE",
       "effect": "WoW Mana",
       "zones": [
-        "pc"
+        "strip"
       ],
       "priority": 25,
       "clearOn": [
@@ -198,16 +252,33 @@
     },
     {
       "name": "In Combat",
-      "enabled": false,
+      "enabled": true,
       "event": "PLAYER_COMBAT_START",
       "effect": "WoW In Combat",
       "zones": [
-        "pc"
+        "rightTop",
+        "rightBottom"
       ],
       "priority": 10,
       "clearOn": [
         {
           "event": "PLAYER_COMBAT_END"
+        }
+      ]
+    },
+    {
+      "name": "Calm",
+      "enabled": true,
+      "event": "HEALTH_AVAILABLE",
+      "effect": "WoW Calm",
+      "zones": [
+        "rightTop",
+        "rightBottom"
+      ],
+      "priority": 5,
+      "clearOn": [
+        {
+          "event": "HEALTH_UNAVAILABLE"
         }
       ]
     }

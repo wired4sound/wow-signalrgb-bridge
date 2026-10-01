@@ -37,7 +37,7 @@ node tools/anonymize-log.js <file> [--me <name>]    # fake names/GUIDs before sh
 node tools/lua-check.js            # rough block/paren balance check of the addon Lua
 powershell -ExecutionPolicy Bypass -File tools\beacon-reader.ps1 [-ImagePath shot.png]
 powershell -ExecutionPolicy Bypass -File tools\restart-signalrgb.ps1
-npm test                           # 45 tests (use test/fixtures/rules.json, not the live rules.json) incl. a real (anonymized) Forever log fixture and the reader on generated PNGs
+npm test                           # 47 tests (use test/fixtures/rules.json, not the live rules.json) incl. a real (anonymized) Forever log fixture and the reader on generated PNGs
 ```
 
 No npm dependencies. Node 18+ (global `fetch`).
@@ -57,6 +57,7 @@ Stop the running bridge with `POST /api/shutdown` (header `X-Bridge: 1`) or Ctrl
 - `src/rules.js`: matches events against rules (WeakAuras-style). `clearOn` inherits the rule's spell filter unless `anySpell: true`. `zones` says where a rule shows.
 - `src/controller.js`: priority stack; highest priority wins, ties go to most recent; baseline when empty. Coalesced with `setImmediate`, rate limited. With no fixed baseline (`followManual`), re-reads the current effect when leaving baseline so manual SignalRGB changes stick, but skips that read for `settleMs` (500) after its own apply. `reapply()` re-sends the showing effect; `setOverride()` keeps the compositor applied.
 - `src/signalrgb.js`: the only file that knows the SignalRGB API. Keep it that way.
+- `src/hue.js`: ceiling alerts straight through the Hue Bridge (v1 REST, own key from `node tools/hue-pair.js <ip>` in git-ignored `hue.local.json`; `node tools/hue-pair.js test` flashes). For Hue lights left out of SignalRGB: rules whose `zones` name `ceiling` directly flash `hue.lights` (config) and restore each light's saved state; one alert at a time.
 - `ui/`: settings page (vanilla JS): Effects (live canvas previews, autosave, preview on lights), Rules (with Where), Settings (thresholds, zones, ceiling, game world colors), Activity. Light and dark themes.
 - `addons/SignalBeacon/`: beacon addon, v0.3. Also turns on combat logging at login. `/beacon` toggles, `/beacon test` reports which values are secret.
 - `addons/CursorCoords/`: small cursor coordinates addon.
@@ -107,5 +108,6 @@ SignalRGB 2.5.74, API base `http://127.0.0.1:16038/api/v1` (needs Pro):
 - Effect pages (WebKit): `<img>` requests to localhost work (and their natural size is readable); `fetch`, XHR and `<script src>` to localhost are blocked. So designs are baked into the file, live values arrive as image sizes, and effects report back via an image ping (`/api/effect-ping?name&v&frames&level&z&amb&error`, every 3s).
 - SignalRGB's log (`%LOCALAPPDATA%\WhirlwindFX\SignalRgb\Logs`) does not record effect JS errors. Effects run in its Ultralight engine.
 - **SignalRGB's effect engine can stall**: after a long idle stretch it still reported an effect as active (and "Activated" it in the log) but ran nothing, so the lights froze on the last frame and no effect pinged. A SignalRGB restart fixed it. The bridge's watchdog (`watchdog.enabled`, `staleMs` 15000) re-applies a silent bridge effect, then restarts SignalRGB (at most every 10 minutes). `node tools/check-effects.js` shows when each effect last reported; `node tools/run-effect.js "<name>"` runs an effect file with a fake canvas to catch runtime errors.
+- Hue through SignalRGB (PhilipsHue.js add-on): Entertainment API stream in RGB, 16-bit per channel, no brightness scaling. Streamed white is much dimmer than a Hue white scene (Energize uses the bulbs' white LEDs). When stream frames don't reach a bulb it shows its stored Hue state for a moment (seen 9/29 as 1 s flashes to Energize while other bulbs on the bridge kept dropping off Zigbee); the bridge's event stream showed no stream stop. When SignalRGB goes idle it stops the stream (~26 s after "System is now Idle"). `tools/hue-watch.js` (polled state, lags 1-4 min) and `tools/hue-events.js` (live v2 events) watch the Hue Bridge with the key SignalRGB saved.
 - Fans chained through their pass-through plugs are usually electrically parallel (every fan shows the channel's first LEDs); use one fan component per chained set, or give each fan its own channel for per-fan control.
 - Not yet verified: `PATCH .../presets`, `PATCH /lighting/global_brightness`.

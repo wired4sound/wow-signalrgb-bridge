@@ -16,12 +16,23 @@
   },
   "zones": {
     "gaugeReverse": {
-      "strip": true
+      "strip": false
     },
     "ceiling": {
       "enabled": false,
       "color": "#ffffff"
     },
-    "fromLayout": false
+    "fromLayout": false,
+    "parts": {
+      "strip": []
+    }
+  },
+  "hue": {
+    "lights": [
+      "Hue Office NW",
+      "Hue Office SW",
+      "Hue Office SE",
+      "Hue Office NE"
+    ]
   }
 }

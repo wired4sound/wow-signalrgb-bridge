@@ -16,6 +16,7 @@ const { LogWatcher } = require('./watcher');
 const { BeaconReader, BeaconTracker } = require('./beacon');
 const effectsLib = require('./effects');
 const zonesLib = require('./zones');
+const hueLib = require('./hue');
 
 const ROOT = path.resolve(__dirname, '..');
 const ACTIVITY_MAX = 200;
@@ -67,6 +68,7 @@ class BridgeApp {
     effectsFile = path.join(ROOT, 'effects.json'),
     dryRun = false, logsDir = null, fromStart = false, verbose = false,
     client = null, beaconReader = null, effectsDir = null, restartSignalRGB = null,
+    hueFile = path.join(path.dirname(configFile), 'hue.local.json'), hue = null,
   } = {}) {
     this.files = { config: configFile, rules: rulesFile, effects: effectsFile };
     this.opts = { dryRun, logsDir, fromStart, verbose };
@@ -120,12 +122,20 @@ class BridgeApp {
       dryRun,
       log: this.log,
     });
-    this.engine = new RuleEngine(this.rules, this.controller, { log: this.log });
+    // Ceiling alerts straight to the Hue Bridge (when paired): the Hue lights stay out of
+    // SignalRGB, and rules naming the ceiling flash them, then restore them.
+    const hueLocal = dryRun || !hueFile ? null : hueLib.readLocal(hueFile);
+    this.hue = hue || (this.cfg.hue.enabled && hueLocal?.key && this.cfg.hue.lights.length
+      ? new hueLib.HueAlerts({ ip: hueLocal.ip, key: hueLocal.key, lights: this.cfg.hue.lights, log: this.log })
+      : null);
+    this.engine = new RuleEngine(this.rules, this.controller, { log: this.log, onFire: (rule) => this.hueAlert(rule) });
     // Whole-effect mode (no compositor): an always-on gauge that only targets part of the PC
     // (e.g. the health gauge on the radiator) would take over every light for good, so it
     // is skipped there. Alerts and flashes aimed at one part still show (on everything).
     this.controller.wholeFilter = (e) => {
       const rule = this.rules.find((r) => r.name === e.key);
+      // Ceiling-only alerts never take over the PC.
+      if (rule && !rule.zones.some((z) => zonesLib.GROUPS.pc.includes(z))) return false;
       if (!rule || zonesLib.GROUPS.pc.every((z) => rule.zones.includes(z))) return true;
       const design = Object.values(this.effects).find((d) => d.name === rule.effect);
       return !(design && design.source);
@@ -184,6 +194,15 @@ class BridgeApp {
     });
   }
 
+  // A rule that names the ceiling fired: flash the Hue lights (when paired).
+  hueAlert(rule) {
+    if (!this.hue || !(rule.namedZones || []).includes('ceiling')) return;
+    const design = Object.values(this.effects).find((d) => d.name === rule.effect);
+    const a = hueLib.alertFor(rule, design);
+    this.log.info(`Hue ceiling alert: ${rule.name} (${a.color} x${a.times})`);
+    this.hue.flash(a);
+  }
+
   designIndex() {
     const idx = {};
     Object.values(this.effects).forEach((d, i) => { idx[d.name] = i + 1; });
@@ -197,7 +216,8 @@ class BridgeApp {
     // In game an idle zone shows the game world; outside the game (compositor kept on so
     // the ceiling stays on its room light) it shows the normal color.
     const idle = this.beacon.healthy ? 0 : zonesLib.NORMAL;
-    return zonesLib.resolveZones([...this.controller.entries.values()], ruleZones, this.designIndex(), excluded, idle);
+    const named = Object.fromEntries(this.rules.map((r) => [r.name, r.namedZones || []]));
+    return zonesLib.resolveZones([...this.controller.entries.values()], ruleZones, this.designIndex(), excluded, idle, named);
   }
 
   // Zones run while the beacon is live (in game), unless the top rule uses an effect the
@@ -223,6 +243,7 @@ class BridgeApp {
 
   async start() {
     this.log.info(`Loaded ${this.rules.length} active rules`);
+    if (this.hue) this.log.info(`Hue ceiling alerts on (${this.cfg.hue.lights.join(', ')})`);
     // A dry run must not touch SignalRGB, including its Effects folder: the files carry
     // this instance's port, and would break the effect pings of a live bridge.
     if (!this.opts.dryRun) this.readLayoutZones();
@@ -261,7 +282,10 @@ class BridgeApp {
   // applied -> re-apply; still nothing -> restart SignalRGB (at most every 10 minutes).
   watchdog(now = Date.now()) {
     const wd = this.cfg.watchdog;
-    if (!wd.enabled || this.opts.dryRun || this.stopping) return;
+    if (!wd.enabled || this.opts.dryRun || this.stopping) { this.wd.off = true; return; }
+    // Just switched back on (e.g. after SignalRGB was restarted by hand): start a fresh
+    // grace period instead of counting the time it was off as silence.
+    if (this.wd.off) { this.wd.off = false; this.wd.step = 0; this.wd.okAt = now; return; }
     const { showing: name, showingKey } = this.controller.status();
     // Previews are short and test tools borrow an effect file with a page that never pings.
     if (showingKey === PREVIEW_KEY) { this.wd.step = 0; this.wd.okAt = now; return; }

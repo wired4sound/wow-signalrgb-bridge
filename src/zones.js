@@ -146,12 +146,17 @@ function expandZones(list) {
 // entries: controller entries (highest priority first is not assumed). ruleZones: rule name
 // -> expanded zone list. designIndex: effect name -> index (1-based) or undefined.
 // Returns per-zone { index, key } in ZONE_NAMES order.
-// excluded: zones the bridge leaves out; they show the fixed room light instead.
+// excluded: zones the bridge leaves out; they show the fixed room light instead, except
+// while a rule that names the zone directly (namedZones: rule name -> zones) is active.
 // idleIndex: what a zone with no rule shows (0 = game world ambience, NORMAL = normal color).
-function resolveZones(entries, ruleZones, designIndex, excluded = [], idleIndex = 0) {
+function resolveZones(entries, ruleZones, designIndex, excluded = [], idleIndex = 0, namedZones = {}) {
   const sorted = [...entries].sort((a, b) => b.priority - a.priority || b.seq - a.seq);
   return ZONE_NAMES.map((zone) => {
-    if (excluded.includes(zone)) return { index: ROOM_LIGHT, key: null, effect: null, room: true };
+    if (excluded.includes(zone)) {
+      const n = sorted.find((x) => (namedZones[x.key] || []).includes(zone) && designIndex[x.effect]);
+      if (n) return { index: designIndex[n.effect], key: n.key, effect: n.effect };
+      return { index: ROOM_LIGHT, key: null, effect: null, room: true };
+    }
     const e = sorted.find((x) => (ruleZones[x.key] || ZONE_NAMES).includes(zone) && designIndex[x.effect]);
     if (e) return { index: designIndex[e.effect], key: e.key, effect: e.effect };
     return { index: idleIndex, key: null, effect: null, normal: idleIndex === NORMAL };

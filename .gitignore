@@ -1,6 +1,9 @@
 # Personal notes for Claude Code (see CLAUDE.md)
 CLAUDE.local.md
 
+# Hue Bridge key for ceiling alerts (tools/hue-pair.js)
+hue.local.json
+
 # Runtime and scratch files
 node_modules/
 sandbox/
